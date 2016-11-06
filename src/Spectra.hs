@@ -27,7 +27,6 @@ instance Show IonAbundance where
 data MSSpectrum = MSSpectrum { getMSSpectrum :: [(Mz, IonAbundance)] }
   deriving (Eq, Ord)
 
-
 instance Show MSSpectrum where
   show (MSSpectrum s) = "MS spectrum \n" ++ renderPairList s
 
