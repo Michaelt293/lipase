@@ -39,7 +39,7 @@ packages:
 - location: .
 - location:
     git: git@github.com:Michaelt293/isotope.git
-    commit: a6961b86e57bb5ae06028b15ed92b871b3f59ccc
+    commit: b239442648d3efe0ca89a05439a80fa107f16114
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps: []

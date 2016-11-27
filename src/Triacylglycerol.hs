@@ -11,15 +11,15 @@ newtype NumCarbons = NumCarbons { getNumCarbons :: Int }
 instance Show NumCarbons where
   show (NumCarbons n) = show n
 
-newtype NumDoubleBond = NumDoubleBond { getNumDoubleBond :: Int }
+newtype NumDoubleBonds = NumDoubleBonds { getNumDoubleBonds :: Int }
   deriving (Eq, Ord, Num)
 
-instance Show NumDoubleBond where
-  show (NumDoubleBond n) = show n
+instance Show NumDoubleBonds where
+  show (NumDoubleBonds n) = show n
 
 data FattyAcyl = FattyAcyl {
-    numCarbons    :: NumCarbons
-  , numDoubleBond :: NumDoubleBond
+    numCarbons     :: NumCarbons
+  , numDoubleBonds :: NumDoubleBonds
 } deriving (Eq, Ord)
 
 instance Show FattyAcyl where
@@ -46,16 +46,16 @@ instance Show Triacylglycerol where
 instance ToMolecularFormula FattyAcyl where
   toMolecularFormula (FattyAcyl cs dbs) = mkMolecularFormula
     [ (C, getNumCarbons cs)
-    , (H, getNumCarbons cs * 2 + 1 - getNumDoubleBond dbs * 2)
+    , (H, getNumCarbons cs * 2 + 1 - getNumDoubleBonds dbs * 2)
     , (O, 2)
     ]
 
-instance ChemicalMass FattyAcyl where
+instance ToElementalComposition FattyAcyl where
   toElementalComposition = toElementalComposition . toMolecularFormula
 
 instance ToMolecularFormula Triacylglycerol where
   toMolecularFormula (Triacylglycerol a b c) =
     mkMolecularFormula [(C, 3), (H, 5)] |+| foldMap toMolecularFormula [a, b, c]
 
-instance ChemicalMass Triacylglycerol where
+instance ToElementalComposition Triacylglycerol where
   toElementalComposition = toElementalComposition . toMolecularFormula

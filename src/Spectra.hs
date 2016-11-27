@@ -36,7 +36,7 @@ renderPairList ps = intercalate "\n" $ renderPair <$> ps
     renderPair (a, b) = show a ++ ", " ++ show b
 
 data MS2Spectrum = MS2Spectrum {
-    mS2precursorMz    :: Mz
+    mS2precursorMz :: Mz
   , getMS2Spectrum :: [(Mz, IonAbundance)]
 } deriving (Eq, Ord)
 
@@ -54,3 +54,11 @@ instance Show NeutralLossSpectrum where
     "Neutral loss spectrum \n" ++
     "precursor ion: " ++ show p ++ "\n" ++
     renderPairList s
+
+ionAndAbundance :: [String] -> (Mz, IonAbundance)
+ionAndAbundance line = case line of
+  ion : abund : _ -> (Mz (read ion), Intensity (read abund) )
+  _ -> error "not a valid mass spectrum"
+
+readSpectrum :: [[String]] -> [(Mz, IonAbundance)]
+readSpectrum spec = ionAndAbundance <$> spec
