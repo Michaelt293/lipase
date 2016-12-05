@@ -25,10 +25,11 @@ main = do
   unprocessMsSpectrum <- readCsv msSpectrumFile
   unprocessMs2Spectrum <- traverse readCsv ms2SpectraFiles
   let processCsv csv =  splitOn "," <$> drop 2 (lines csv)
-  let msSpectrum = MSSpectrum . readSpectrum . processCsv $ unprocessMsSpectrum
+  let msSpectrum = MSSpectrum . insertAbundances . readSpectrum . processCsv $ unprocessMsSpectrum
   let ms2Spectra = zipWith
                      MS2Spectrum
                      precursorIonsMz
-                     (readSpectrum . processCsv <$> unprocessMs2Spectrum)
-  print msSpectrum
-  print ms2Spectra
+                     (insertAbundances . readSpectrum . processCsv <$> unprocessMs2Spectrum)
+  let filteredMS2Spectra = filterSpectrumByAbundance (RelativeAbundance 5) <$> ms2Spectra
+  let neutralLossSpectra = toNeutralLossSpectrum <$> filteredMS2Spectra
+  print neutralLossSpectra
