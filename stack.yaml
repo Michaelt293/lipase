@@ -37,9 +37,9 @@ resolver: lts-7.7
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - location: .
-- location:
-    git: git@github.com:Michaelt293/isotope.git
-    commit: b239442648d3efe0ca89a05439a80fa107f16114
+- location: /Users/michaelthomas/src/isotope
+#    git: git@github.com:Michaelt293/isotope.git
+#    commit: b239442648d3efe0ca89a05439a80fa107f16114
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps: []

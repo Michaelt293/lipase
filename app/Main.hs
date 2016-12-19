@@ -30,6 +30,6 @@ main = do
                      MS2Spectrum
                      precursorIonsMz
                      (insertAbundances . readSpectrum . processCsv <$> unprocessMs2Spectrum)
-  let filteredMS2Spectra = filterSpectrumByAbundance (RelativeAbundance 5) <$> ms2Spectra
+  let filteredMS2Spectra = removePrecursorIon . filterByRelativeAbundance (RelativeAbundance 5) <$> ms2Spectra
   let neutralLossSpectra = toNeutralLossSpectrum <$> filteredMS2Spectra
   print neutralLossSpectra

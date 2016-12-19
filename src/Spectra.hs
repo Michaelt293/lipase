@@ -4,9 +4,10 @@ module Spectra where
 
 import Data.List
 import Data.Ord
+import Numeric
 
 newtype Mz = Mz { getMz :: Double }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Num)
 
 instance Show Mz where
   show (Mz n) = "m/z " ++ show n
@@ -23,87 +24,95 @@ newtype Intensity = Intensity { getIntensity :: Double }
 instance Show Intensity where
   show (Intensity n) = "Intensity " ++ show n
 
-data Abundance = RelativeAbundance Double
-               | NormalisedAbundance Double
-               deriving (Eq, Ord)
+-- formatFloatN floatNum numOfDecimal = showFFloat (Just numOfDecimals) floatNum ""
 
-instance Show Abundance where
-  show (RelativeAbundance a) = show a ++ "%"
-  show (NormalisedAbundance a) = show a ++ "%"
+newtype RelativeAbundance = RelativeAbundance Double
+  deriving (Show, Eq, Ord, Num, Fractional) -- write show instance, 2 d.p, add "%"
+
+newtype NormalisedAbundance =  NormalisedAbundance Double -- write show instance, 2 d.p, add "%"
+  deriving (Show, Eq, Ord, Num, Fractional)
 
 class Spectrum a where
-  getSpectrum :: a -> [(Mz, Intensity, Abundance)]
-  sumIntensities :: a -> Intensity
-  mostAbundantIon :: a -> (Mz, Intensity, Abundance)
-  toNormalisedAbundances :: a -> [(Mz, Intensity, Abundance)]
-  toRelativeAbundances :: a -> [(Mz, Intensity, Abundance)]
-  filterByAbundance :: Abundance -> a -> [(Mz, Intensity, Abundance)]
-  filterSpectrumByAbundance :: Abundance -> a -> a
-  mostAbundantIon spec = maximumBy (comparing (\(_, i, _) -> i)) (getSpectrum spec)
-  sumIntensities spec = foldr (\(_, i, _) acc -> acc + i) 0 (getSpectrum spec)
-  toNormalisedAbundances spec =
-    (\(mz, i, _) -> (mz, i,
-      NormalisedAbundance
-        (getIntensity i * 100 / getIntensity (sumIntensities spec))))
-        <$> getSpectrum spec
-  toRelativeAbundances spec =
-    (\(mz, i, _) -> (mz, i,
-      RelativeAbundance
-        (getIntensity i * 100 / getIntensity ((\(_, a, _) -> a) (mostAbundantIon spec)))))
-        <$> getSpectrum spec
-  filterByAbundance abun spec =
-    case abun of
-      (NormalisedAbundance _) -> filter (\(_, _, a) -> a > abun) (toNormalisedAbundances spec)
-      (RelativeAbundance _) -> filter (\(_, _, a) -> a > abun) (toRelativeAbundances spec)
-  {-# MINIMAL (getSpectrum, filterSpectrumByAbundance) #-}
+  smap :: ([SpectrumRow] -> [SpectrumRow]) -> a -> a
+  filterByRelativeAbundance :: RelativeAbundance -> a -> a
+  filterByNormalisedAbundance :: NormalisedAbundance -> a -> a
+  selectRange :: Mz -> Mz -> a -> a
+  recalculateAbundances :: a -> a
+  filterByRelativeAbundance a = smap (filterRelativeAbundance a)
+  filterByNormalisedAbundance a = smap (filterNormalisedAbundance a)
+  selectRange min' max' spec =
+    recalculateAbundances $ smap (filter (\(SpectrumRow m _ _ _) -> m < max' && m > min')) spec
+  recalculateAbundances = smap (insertAbundances . fmap (\(SpectrumRow m i _ _) -> (m, i)))
+  {-# MINIMAL (smap) #-}
+    --insertAbundances (\(SpectrumRow m i _ _) -> (m, i) $
 
-data MSSpectrum = MSSpectrum { getMSSpectrum :: [(Mz, Intensity, Abundance)] }
+filterNormalisedAbundance :: NormalisedAbundance -> [SpectrumRow] -> [SpectrumRow]
+filterNormalisedAbundance abun =
+  filter (\(SpectrumRow _ _ _ n) -> n > abun)
+
+filterRelativeAbundance :: RelativeAbundance -> [SpectrumRow] -> [SpectrumRow]
+filterRelativeAbundance abun =
+  filter (\(SpectrumRow _ _ a _) -> a > abun)
+
+data SpectrumRow = SpectrumRow {
+    mz :: Mz
+  , intensity :: Intensity
+  , relativeAbundance :: RelativeAbundance
+  , normalisedAbundance :: NormalisedAbundance
+} deriving (Eq, Ord)
+
+instance Show SpectrumRow where
+  show (SpectrumRow m i r n) = intercalate ", " [show m, show i, show r, show n]
+
+data MSSpectrum = MSSpectrum
+  { getMSSpectrum :: [SpectrumRow] }
   deriving (Eq, Ord)
 
 instance Spectrum MSSpectrum where
-  getSpectrum = getMSSpectrum
-  filterSpectrumByAbundance a spec = MSSpectrum (filterByAbundance a spec)
+  smap f spec = MSSpectrum $ f (getMSSpectrum spec)
 
 instance Show MSSpectrum where
-  show (MSSpectrum s) = "MS spectrum \n" ++ renderTupleList s
+  show (MSSpectrum s) = "MS spectrum \n" ++ show s
 
-renderTupleList :: (Show a, Show b, Show c) => [(a, b, c)] -> String
-renderTupleList ps = intercalate "\n" $ renderPair <$> ps
+-- Delete this function if it remains unused
+renderTupleList :: (Show a, Show b, Show c, Show d) => [(a, b, c, d)] -> String
+renderTupleList ps = intercalate "\n" (render <$> ps)
   where
-    renderPair (a, b, c) = show a ++ ", " ++ show b ++ ", " ++ show c
+    render (a, b, c, d) = intercalate ", " [show a, show b, show c, show d]
 
 data MS2Spectrum = MS2Spectrum {
     mS2precursorMz :: Mz
-  , getMS2Spectrum :: [(Mz, Intensity, Abundance)]
+  , getMS2Spectrum :: [SpectrumRow]
 } deriving (Eq, Ord)
 
 instance Show MS2Spectrum where
   show (MS2Spectrum p s) =
-     "MS2 spectrum \n" ++ "precursor ion: " ++ show p ++ renderTupleList s
+     "MS2 spectrum \n" ++ "precursor ion: " ++ show p ++ show s
 
 instance Spectrum MS2Spectrum where
-  getSpectrum = getMS2Spectrum
-  filterSpectrumByAbundance a spec =
-    MS2Spectrum (mS2precursorMz spec)(filterByAbundance a spec)
+  smap f spec = MS2Spectrum (mS2precursorMz spec) $ f (getMS2Spectrum spec)
+
+removePrecursorIon :: MS2Spectrum -> MS2Spectrum
+removePrecursorIon spec = selectRange 0 (mS2precursorMz spec - Mz 2) spec
 
 calNeutralLosses :: MS2Spectrum -> [Dalton]
 calNeutralLosses (MS2Spectrum p s) =
-  (\(mz, _, _) -> Dalton (getMz p - getMz mz)) <$> s
+  (\(SpectrumRow mz _ _ _) -> Dalton (getMz p - getMz mz)) <$> s
 
 data NeutralLossSpectrum = NeutralLossSpectrum {
     nLPrecursorMz          :: Mz
-  , getNeutralLossSpectrum :: [(Dalton, Intensity, Abundance)]
+  , getNeutralLossSpectrum :: [(Dalton, Intensity, RelativeAbundance, NormalisedAbundance)]
   } deriving (Eq, Ord)
 
 instance Show NeutralLossSpectrum where
   show (NeutralLossSpectrum p s) =
      "Neutral loss spectrum \n" ++
      "precursor ion: " ++ show p ++ "\n" ++
-     renderTupleList s ++ "\n"
+     show s
 
 toNeutralLossSpectrum :: MS2Spectrum -> NeutralLossSpectrum
 toNeutralLossSpectrum (MS2Spectrum prec spec) = NeutralLossSpectrum prec
- ((\(mz, i, a) -> (Dalton (getMz prec - getMz mz), i, a)) <$> spec)
+ ((\(SpectrumRow mz i r n) -> (Dalton (getMz prec - getMz mz), i, r, n)) <$> spec)
 
 -- Reads spectrum from CSV file
 readSpectrum :: [[String]] -> [(Mz, Intensity)]
@@ -117,13 +126,23 @@ readSpectrum spec = ionAndAbundance <$> spec
 sumIntensities' :: [(Mz, Intensity)] -> Intensity
 sumIntensities' = foldr (\(_, i) acc -> acc + i) 0
 
-normalizedAbundances :: [(Mz, Intensity)] -> [Abundance]
+normalizedAbundances :: [(Mz, Intensity)] -> [NormalisedAbundance]
 normalizedAbundances spec =
   (\(_, i) ->
       NormalisedAbundance
         (getIntensity i * 100 / getIntensity (sumIntensities' spec)))
         <$> spec
 
-insertAbundances :: [(Mz, Intensity)] -> [(Mz, Intensity, Abundance)]
+relativeAbundances :: [(Mz, Intensity)] -> [RelativeAbundance]
+relativeAbundances spec =
+  (\(_, i) ->
+    RelativeAbundance
+      (getIntensity i * 100 / getIntensity (snd (maximumBy (comparing snd) spec))))
+      <$> spec
+
+insertAbundances :: [(Mz, Intensity)] -> [SpectrumRow]
 insertAbundances spec =
-  zipWith (\(a, b) c -> (a, b, c)) spec (normalizedAbundances spec)
+  zipWith3 (\(a, b) c d -> SpectrumRow a b c d)
+    spec
+    (relativeAbundances spec)
+    (normalizedAbundances spec)
