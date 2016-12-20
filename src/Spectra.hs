@@ -2,6 +2,7 @@
 
 module Spectra where
 
+import Isotope
 import Data.List
 import Data.Ord
 import Numeric
@@ -41,28 +42,35 @@ class Spectrum a where
   filterByRelativeAbundance a = smap (filterRelativeAbundance a)
   filterByNormalisedAbundance a = smap (filterNormalisedAbundance a)
   selectRange min' max' spec =
-    recalculateAbundances $ smap (filter (\(SpectrumRow m _ _ _) -> m < max' && m > min')) spec
-  recalculateAbundances = smap (insertAbundances . fmap (\(SpectrumRow m i _ _) -> (m, i)))
+    recalculateAbundances $ smap (filter (\(SpectrumRow m _) -> m < max' && m > min')) spec
+  recalculateAbundances = smap (insertAbundances . fmap (\(SpectrumRow m i) -> (m, intensity i)))
   {-# MINIMAL (smap) #-}
     --insertAbundances (\(SpectrumRow m i _ _) -> (m, i) $
 
 filterNormalisedAbundance :: NormalisedAbundance -> [SpectrumRow] -> [SpectrumRow]
 filterNormalisedAbundance abun =
-  filter (\(SpectrumRow _ _ _ n) -> n > abun)
+  filter (\(SpectrumRow _ i) -> normalisedAbundance i > abun)
 
 filterRelativeAbundance :: RelativeAbundance -> [SpectrumRow] -> [SpectrumRow]
 filterRelativeAbundance abun =
-  filter (\(SpectrumRow _ _ a _) -> a > abun)
+  filter (\(SpectrumRow _ i) -> relativeAbundance i > abun)
 
-data SpectrumRow = SpectrumRow {
-    mz :: Mz
-  , intensity :: Intensity
+data IonInfo = IonInfo {
+    intensity :: Intensity
   , relativeAbundance :: RelativeAbundance
   , normalisedAbundance :: NormalisedAbundance
 } deriving (Eq, Ord)
 
+instance Show IonInfo where
+  show (IonInfo i r n) = intercalate ", " [show i, show r, show n]
+
+data SpectrumRow = SpectrumRow {
+    mz :: Mz
+  , spectrumRowIonInfo :: IonInfo
+} deriving (Eq, Ord)
+
 instance Show SpectrumRow where
-  show (SpectrumRow m i r n) = intercalate ", " [show m, show i, show r, show n]
+  show (SpectrumRow m i) = intercalate ", " [show m, show i]
 
 data MSSpectrum = MSSpectrum
   { getMSSpectrum :: [SpectrumRow] }
@@ -72,13 +80,10 @@ instance Spectrum MSSpectrum where
   smap f spec = MSSpectrum $ f (getMSSpectrum spec)
 
 instance Show MSSpectrum where
-  show (MSSpectrum s) = "MS spectrum \n" ++ show s
+  show (MSSpectrum s) = "MS spectrum \n" ++ showList' s
 
--- Delete this function if it remains unused
-renderTupleList :: (Show a, Show b, Show c, Show d) => [(a, b, c, d)] -> String
-renderTupleList ps = intercalate "\n" (render <$> ps)
-  where
-    render (a, b, c, d) = intercalate ", " [show a, show b, show c, show d]
+showList' :: (Show a) => [a] -> String
+showList' l = intercalate "\n" $ show <$> l
 
 data MS2Spectrum = MS2Spectrum {
     mS2precursorMz :: Mz
@@ -87,7 +92,7 @@ data MS2Spectrum = MS2Spectrum {
 
 instance Show MS2Spectrum where
   show (MS2Spectrum p s) =
-     "MS2 spectrum \n" ++ "precursor ion: " ++ show p ++ show s
+     "MS2 spectrum \n" ++ "precursor ion: " ++ show p ++ showList' s
 
 instance Spectrum MS2Spectrum where
   smap f spec = MS2Spectrum (mS2precursorMz spec) $ f (getMS2Spectrum spec)
@@ -95,24 +100,33 @@ instance Spectrum MS2Spectrum where
 removePrecursorIon :: MS2Spectrum -> MS2Spectrum
 removePrecursorIon spec = selectRange 0 (mS2precursorMz spec - Mz 2) spec
 
-calNeutralLosses :: MS2Spectrum -> [Dalton]
+calNeutralLosses :: MS2Spectrum -> [MonoisotopicMass]
 calNeutralLosses (MS2Spectrum p s) =
-  (\(SpectrumRow mz _ _ _) -> Dalton (getMz p - getMz mz)) <$> s
+  (\(SpectrumRow mz _) -> MonoisotopicMass (getMz p - getMz mz)) <$> s
+
+data NeutralLossRow = NeutralLossRow {
+    neutralLoss :: MonoisotopicMass
+  , neutralLossIonInfo :: IonInfo
+} deriving (Eq, Ord)
+
+instance Show NeutralLossRow where
+  show (NeutralLossRow n i) = intercalate ", " [show n, show i]
 
 data NeutralLossSpectrum = NeutralLossSpectrum {
     nLPrecursorMz          :: Mz
-  , getNeutralLossSpectrum :: [(Dalton, Intensity, RelativeAbundance, NormalisedAbundance)]
+  , neutralLossSpectrum :: [NeutralLossRow]
   } deriving (Eq, Ord)
 
 instance Show NeutralLossSpectrum where
-  show (NeutralLossSpectrum p s) =
+  show (NeutralLossSpectrum n s) =
      "Neutral loss spectrum \n" ++
-     "precursor ion: " ++ show p ++ "\n" ++
-     show s
+     "precursor ion: " ++ show n ++ "\n" ++
+     showList' s
 
 toNeutralLossSpectrum :: MS2Spectrum -> NeutralLossSpectrum
 toNeutralLossSpectrum (MS2Spectrum prec spec) = NeutralLossSpectrum prec
- ((\(SpectrumRow mz i r n) -> (Dalton (getMz prec - getMz mz), i, r, n)) <$> spec)
+ ((\(SpectrumRow m i) ->
+   NeutralLossRow (MonoisotopicMass (getMz prec - getMz m)) i) <$> spec)
 
 -- Reads spectrum from CSV file
 readSpectrum :: [[String]] -> [(Mz, Intensity)]
@@ -142,7 +156,7 @@ relativeAbundances spec =
 
 insertAbundances :: [(Mz, Intensity)] -> [SpectrumRow]
 insertAbundances spec =
-  zipWith3 (\(a, b) c d -> SpectrumRow a b c d)
+  zipWith3 (\(a, b) c d -> SpectrumRow a (IonInfo b c d))
     spec
     (relativeAbundances spec)
     (normalizedAbundances spec)
