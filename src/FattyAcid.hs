@@ -65,13 +65,39 @@ oddChainFAs = c15s ++ c17s ++ c19s ++ c21s
 fattyAcyls :: [FattyAcyl]
 fattyAcyls = evenChainFAs ++ oddChainFAs
 
+faMonoisotopicMass :: FattyAcyl -> MonoisotopicMass
+faMonoisotopicMass fa = monoisotopicMass fa |+| monoisotopicMass H
+
 fattyAcidMonoisotopicMasses :: [MonoisotopicMass]
-fattyAcidMonoisotopicMasses =
-  (\fa -> monoisotopicMass fa |+| monoisotopicMass H) <$> fattyAcyls
+fattyAcidMonoisotopicMasses = faMonoisotopicMass <$> fattyAcyls
 
 data TentativelyAssignedFA = TentativelyAssignedFA {
     tentativelyAssignedFA :: Maybe FattyAcyl
   , tentativelyAssignedFAIonInfo :: IonInfo
 } deriving (Show, Eq, Ord) -- Maybe write my own Show instance.
 
-type TentativelyAssignedFAs = [TentativelyAssignedFA]
+data TentativelyAssignedFAs = TentativelyAssignedFAs {
+    tentativelyAssignedFAsPrecIon :: Mz
+  , tentativelyAssignedFAs :: [TentativelyAssignedFA]
+} deriving (Eq, Ord)
+
+instance Show TentativelyAssignedFAs where
+  show (TentativelyAssignedFAs p fas) =
+    "Precursor ion: " ++ show p ++ "\n" ++
+    showList' fas
+
+assignFA :: Double -> MonoisotopicMass -> [FattyAcyl] -> Maybe FattyAcyl
+assignFA n m fas =
+  case fas of
+    [] -> Nothing
+    f:fs -> if withinTolerance n m (faMonoisotopicMass f)
+              then Just f
+              else assignFA n m fs
+
+neutralLossRowToFA :: NeutralLossRow -> TentativelyAssignedFA
+neutralLossRowToFA (NeutralLossRow nl i) =
+  TentativelyAssignedFA (assignFA 0.3 nl fattyAcyls) i
+
+toTentativelyAssignedFAs :: NeutralLossSpectrum -> TentativelyAssignedFAs
+toTentativelyAssignedFAs (NeutralLossSpectrum p nls) =
+  TentativelyAssignedFAs p (neutralLossRowToFA <$> nls)

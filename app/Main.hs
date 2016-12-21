@@ -1,9 +1,12 @@
 module Main where
 
+import Isotope
 import Spectra
+import FattyAcid
 import System.Environment
 import Data.List
 import Data.Char
+import Data.Maybe
 import System.Directory
 import Data.List.Split
 
@@ -19,8 +22,8 @@ main = do
   let ms2SpectraFiles = filter (not . isInfixOf "pos_MS_spectrum") csvFiles
   let precursorIonsMz = findPrecursorIonMz <$> ms2SpectraFiles
         where findPrecursorIonMz fileName = Mz $
-                (read . takeWhile isDigit $
-                 dropWhile (not . isDigit) fileName) + 0.5 -- maybe don't hard code this value
+                (MonoisotopicMass . read . takeWhile isDigit $
+                 dropWhile (not . isDigit) fileName) |+| MonoisotopicMass 0.5 -- maybe don't hard code this value
   let readCsv = readFile . (\x -> dir ++ "/" ++ x)
   unprocessMsSpectrum <- readCsv msSpectrumFile
   unprocessMs2Spectrum <- traverse readCsv ms2SpectraFiles
@@ -32,4 +35,6 @@ main = do
                      (insertAbundances . readSpectrum . processCsv <$> unprocessMs2Spectrum)
   let filteredMS2Spectra = removePrecursorIon . filterByRelativeAbundance (RelativeAbundance 5) <$> ms2Spectra
   let neutralLossSpectra = toNeutralLossSpectrum <$> filteredMS2Spectra
-  print neutralLossSpectra
+  let tentativelyAssignFAs = toTentativelyAssignedFAs <$> neutralLossSpectra
+  let fas = sort . nub . catMaybes $ tentativelyAssignedFA <$> concat (tentativelyAssignedFAs <$> tentativelyAssignFAs)
+  print fas

@@ -2,8 +2,10 @@
 module Triacylglycerol where
 
 import FattyAcid
+import Spectra
 import Isotope
 import Data.List
+import Control.Monad
 
 data Triacylglycerol = Triacylglycerol {
     fa1 :: FattyAcyl
@@ -29,3 +31,13 @@ instance ToMolecularFormula Triacylglycerol where
 
 instance ToElementalComposition Triacylglycerol where
   toElementalComposition = toElementalComposition . toMolecularFormula
+
+-- Brute force function to find possible TAGs. Write a more efficient
+-- implementation if there are performance issues.
+possibleTAGs :: Double -> MonoisotopicMass -> [FattyAcyl] -> [Triacylglycerol]
+possibleTAGs n prec fas = nub $ do
+  fa1 <- fas
+  fa2 <- fas
+  fa3 <- fas
+  guard (withinTolerance n prec (monoisotopicMass (Triacylglycerol fa1 fa2 fa3)))
+  return $ Triacylglycerol fa1 fa2 fa3

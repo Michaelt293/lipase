@@ -7,17 +7,11 @@ import Data.List
 import Data.Ord
 import Numeric
 
-newtype Mz = Mz { getMz :: Double }
-  deriving (Eq, Ord, Num)
+newtype Mz = Mz { monoisotopicMass' :: MonoisotopicMass }
+           deriving (Eq, Ord, Operators)
 
 instance Show Mz where
   show (Mz n) = "m/z " ++ show n
-
-newtype Dalton = Dalton { getDalton :: Double }
-  deriving (Eq, Ord, Num, Fractional)
-
-instance Show Dalton where
-  show (Dalton n) = show n ++ " Da"
 
 newtype Intensity = Intensity { getIntensity :: Double }
   deriving (Eq, Ord, Num, Fractional)
@@ -98,11 +92,13 @@ instance Spectrum MS2Spectrum where
   smap f spec = MS2Spectrum (mS2precursorMz spec) $ f (getMS2Spectrum spec)
 
 removePrecursorIon :: MS2Spectrum -> MS2Spectrum
-removePrecursorIon spec = selectRange 0 (mS2precursorMz spec - Mz 2) spec
+removePrecursorIon spec =
+  selectRange (Mz (MonoisotopicMass 0))
+              (mS2precursorMz spec |-| Mz (MonoisotopicMass 2)) spec
 
 calNeutralLosses :: MS2Spectrum -> [MonoisotopicMass]
 calNeutralLosses (MS2Spectrum p s) =
-  (\(SpectrumRow mz _) -> MonoisotopicMass (getMz p - getMz mz)) <$> s
+  (\(SpectrumRow mz _) -> monoisotopicMass' (p |-| mz)) <$> s
 
 data NeutralLossRow = NeutralLossRow {
     neutralLoss :: MonoisotopicMass
@@ -113,7 +109,7 @@ instance Show NeutralLossRow where
   show (NeutralLossRow n i) = intercalate ", " [show n, show i]
 
 data NeutralLossSpectrum = NeutralLossSpectrum {
-    nLPrecursorMz          :: Mz
+    nLPrecursorMz       :: Mz
   , neutralLossSpectrum :: [NeutralLossRow]
   } deriving (Eq, Ord)
 
@@ -126,7 +122,7 @@ instance Show NeutralLossSpectrum where
 toNeutralLossSpectrum :: MS2Spectrum -> NeutralLossSpectrum
 toNeutralLossSpectrum (MS2Spectrum prec spec) = NeutralLossSpectrum prec
  ((\(SpectrumRow m i) ->
-   NeutralLossRow (MonoisotopicMass (getMz prec - getMz m)) i) <$> spec)
+   NeutralLossRow (monoisotopicMass' (prec |-| m)) i) <$> spec)
 
 -- Reads spectrum from CSV file
 readSpectrum :: [[String]] -> [(Mz, Intensity)]
@@ -134,7 +130,7 @@ readSpectrum spec = ionAndAbundance <$> spec
   where
     ionAndAbundance :: [String] -> (Mz, Intensity)
     ionAndAbundance line = case line of
-      ion : abund : _ -> (Mz (read ion), Intensity (read abund) )
+      ion : abund : _ -> (Mz (MonoisotopicMass (read ion)), Intensity (read abund))
       _ -> error "not a valid mass spectrum"
 
 sumIntensities' :: [(Mz, Intensity)] -> Intensity
@@ -160,3 +156,6 @@ insertAbundances spec =
     spec
     (relativeAbundances spec)
     (normalizedAbundances spec)
+
+withinTolerance :: Double -> MonoisotopicMass -> MonoisotopicMass -> Bool
+withinTolerance n v1 v2 = n > abs (getMonoisotopicMass (v1 |-| v2))

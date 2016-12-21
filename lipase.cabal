@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Spectra
                      , Triacylglycerol
+                     , FattyAcid
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , Chart
@@ -31,6 +32,7 @@ executable lipase-exe
   build-depends:       base
                      , directory
                      , lipase
+                     , isotope
                      , split
   default-language:    Haskell2010
 
