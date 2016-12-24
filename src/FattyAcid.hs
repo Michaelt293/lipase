@@ -3,6 +3,7 @@ module FattyAcid where
 
 import Isotope
 import Spectra
+import Data.Maybe
 
 newtype NumCarbons = NumCarbons { getNumCarbons :: Int }
   deriving (Eq, Ord, Num)
@@ -101,3 +102,6 @@ neutralLossRowToFA (NeutralLossRow nl i) =
 toTentativelyAssignedFAs :: NeutralLossSpectrum -> TentativelyAssignedFAs
 toTentativelyAssignedFAs (NeutralLossSpectrum p nls) =
   TentativelyAssignedFAs p (neutralLossRowToFA <$> nls)
+
+collectFAs :: TentativelyAssignedFAs -> [FattyAcyl]
+collectFAs fas = catMaybes $ tentativelyAssignedFA <$> tentativelyAssignedFAs fas

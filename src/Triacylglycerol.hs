@@ -5,6 +5,7 @@ import FattyAcid
 import Spectra
 import Isotope
 import Data.List
+import Data.Maybe
 import Control.Monad
 
 data Triacylglycerol = Triacylglycerol {
@@ -27,7 +28,7 @@ instance Show Triacylglycerol where
 
 instance ToMolecularFormula Triacylglycerol where
   toMolecularFormula (Triacylglycerol a b c) =
-    mkMolecularFormula [(C, 3), (H, 5)] |+| foldMap toMolecularFormula [a, b, c]
+    mkMolecularFormula [(C, 3), (H, 6)] |+| foldMap toMolecularFormula [a, b, c]
 
 instance ToElementalComposition Triacylglycerol where
   toElementalComposition = toElementalComposition . toMolecularFormula
@@ -41,3 +42,58 @@ possibleTAGs n prec fas = nub $ do
   fa3 <- fas
   guard (withinTolerance n prec (monoisotopicMass (Triacylglycerol fa1 fa2 fa3)))
   return $ Triacylglycerol fa1 fa2 fa3
+
+findPossibleTAGs :: TentativelyAssignedFAs -> [Triacylglycerol]
+findPossibleTAGs fas =
+  possibleTAGs 0.3
+               (monoisotopicMass'
+               (tentativelyAssignedFAsPrecIon fas))
+               (collectFAs fas)
+
+tagFAs :: Triacylglycerol -> [FattyAcyl]
+tagFAs (Triacylglycerol fa1 fa2 fa3) = nub [fa1, fa2, fa3]
+
+data AssignedTAGs = AssignedTAGs {
+    spectrumRow :: Maybe SpectrumRow
+  , tags :: [Triacylglycerol]
+  , assignedFAs :: TentativelyAssignedFAs
+} deriving (Show, Eq, Ord)
+
+assignTAGs :: MSSpectrum -> TentativelyAssignedFAs -> AssignedTAGs
+assignTAGs spec fas =
+  AssignedTAGs (findPrecursorIon 0.3 (tentativelyAssignedFAsPrecIon fas) spec)
+               (findPossibleTAGs fas)
+               fas
+
+allTentativelyAssignedFAs :: [AssignedTAGs] -> [FattyAcyl]
+allTentativelyAssignedFAs tgs =
+  sort . nub . catMaybes $
+    tentativelyAssignedFA <$> concat (tentativelyAssignedFAs . assignedFAs <$> tgs)
+
+allAssignedTAGs :: [AssignedTAGs] -> [Triacylglycerol]
+allAssignedTAGs tgs = sort . nub . concat $ tags <$> tgs
+
+allTagFAs :: [AssignedTAGs] -> [FattyAcyl]
+allTagFAs tgs = sort . nub . concat $ tagFAs <$> allAssignedTAGs tgs
+
+totalTagIntensity :: [AssignedTAGs] -> Intensity
+totalTagIntensity = foldMap intensity'
+  where
+    intensity' (AssignedTAGs (Just (SpectrumRow _ (IonInfo i _ _))) _ _) = i
+    intensity' (AssignedTAGs Nothing _ _) = Intensity 0
+
+normalisedAbundanceFAsIndentified :: AssignedTAGs -> NormalisedAbundance
+normalisedAbundanceFAsIndentified (AssignedTAGs _ _ fas) =
+  if null normalisedAbundList
+    then 0
+    else sum normalisedAbundList
+  where
+    normalisedAbundList =
+      normalisedAbundance . tentativelyAssignedFAIonInfo <$>
+      filter (isJust . tentativelyAssignedFA) (tentativelyAssignedFAs fas)
+
+correctionRatio :: AssignedTAGs -> Intensity -> Double
+correctionRatio (AssignedTAGs r _ _) (Intensity i) =
+  case r of
+    Nothing -> 0
+    Just r' -> (getIntensity . intensity . spectrumRowIonInfo) r' / i

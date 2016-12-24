@@ -11,10 +11,17 @@ newtype Mz = Mz { monoisotopicMass' :: MonoisotopicMass }
            deriving (Eq, Ord, Operators)
 
 instance Show Mz where
-  show (Mz n) = "m/z " ++ show n
+  show (Mz n) = "m/z " ++ show (getMonoisotopicMass n)
+
+mkMz :: Double -> Mz
+mkMz = Mz . MonoisotopicMass
 
 newtype Intensity = Intensity { getIntensity :: Double }
   deriving (Eq, Ord, Num, Fractional)
+
+instance Monoid Intensity where
+  mempty = 0
+  mappend = (+)
 
 instance Show Intensity where
   show (Intensity n) = "Intensity " ++ show n
@@ -93,8 +100,8 @@ instance Spectrum MS2Spectrum where
 
 removePrecursorIon :: MS2Spectrum -> MS2Spectrum
 removePrecursorIon spec =
-  selectRange (Mz (MonoisotopicMass 0))
-              (mS2precursorMz spec |-| Mz (MonoisotopicMass 2)) spec
+  selectRange (mkMz 0)
+              (mS2precursorMz spec |-| mkMz 2) spec
 
 calNeutralLosses :: MS2Spectrum -> [MonoisotopicMass]
 calNeutralLosses (MS2Spectrum p s) =
@@ -130,7 +137,7 @@ readSpectrum spec = ionAndAbundance <$> spec
   where
     ionAndAbundance :: [String] -> (Mz, Intensity)
     ionAndAbundance line = case line of
-      ion : abund : _ -> (Mz (MonoisotopicMass (read ion)), Intensity (read abund))
+      ion : abund : _ -> (mkMz (read ion), Intensity (read abund))
       _ -> error "not a valid mass spectrum"
 
 sumIntensities' :: [(Mz, Intensity)] -> Intensity
@@ -159,3 +166,14 @@ insertAbundances spec =
 
 withinTolerance :: Double -> MonoisotopicMass -> MonoisotopicMass -> Bool
 withinTolerance n v1 v2 = n > abs (getMonoisotopicMass (v1 |-| v2))
+
+findPrecursorIon :: Double -> Mz -> MSSpectrum -> Maybe SpectrumRow
+findPrecursorIon n m (MSSpectrum spec) =
+  if null filteredSpectrumRows
+    then Nothing
+    else Just $
+      maximumBy (comparing (intensity . spectrumRowIonInfo)) filteredSpectrumRows
+  where
+    filteredSpectrumRows = filter (\x -> withinTolerance n (monoisotopicMass' m)
+                                  ((monoisotopicMass' . mz) x))
+                                  spec

@@ -3,6 +3,7 @@ module Main where
 import Isotope
 import Spectra
 import FattyAcid
+import Triacylglycerol
 import System.Environment
 import Data.List
 import Data.Char
@@ -21,9 +22,9 @@ main = do
           _      -> error "no MS spectrum"
   let ms2SpectraFiles = filter (not . isInfixOf "pos_MS_spectrum") csvFiles
   let precursorIonsMz = findPrecursorIonMz <$> ms2SpectraFiles
-        where findPrecursorIonMz fileName = Mz $
-                (MonoisotopicMass . read . takeWhile isDigit $
-                 dropWhile (not . isDigit) fileName) |+| MonoisotopicMass 0.5 -- maybe don't hard code this value
+        where findPrecursorIonMz fileName =
+                (mkMz . read . takeWhile isDigit $
+                 dropWhile (not . isDigit) fileName) |+| mkMz 0.5 -- maybe don't hard code this value
   let readCsv = readFile . (\x -> dir ++ "/" ++ x)
   unprocessMsSpectrum <- readCsv msSpectrumFile
   unprocessMs2Spectrum <- traverse readCsv ms2SpectraFiles
@@ -36,5 +37,13 @@ main = do
   let filteredMS2Spectra = removePrecursorIon . filterByRelativeAbundance (RelativeAbundance 5) <$> ms2Spectra
   let neutralLossSpectra = toNeutralLossSpectrum <$> filteredMS2Spectra
   let tentativelyAssignFAs = toTentativelyAssignedFAs <$> neutralLossSpectra
-  let fas = sort . nub . catMaybes $ tentativelyAssignedFA <$> concat (tentativelyAssignedFAs <$> tentativelyAssignFAs)
-  print fas
+  let finalResult = assignTAGs msSpectrum <$> tentativelyAssignFAs
+  putStrLn "Fatty acids in the search list"
+  print fattyAcyls
+  putStrLn "Total tentatively assigned fatty acids"
+  print $ allTentativelyAssignedFAs finalResult
+  putStrLn "Total assigned triacylglycerols"
+  print $ allAssignedTAGs finalResult
+  putStrLn "Total triacylglycerol fatty acids"
+  print $ allTagFAs finalResult
+  print $ normalisedAbundanceFAsIndentified <$> finalResult
