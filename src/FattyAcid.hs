@@ -1,9 +1,11 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 module FattyAcid where
 
 import Isotope
 import Spectra
 import Data.Maybe
+import Control.Lens
 
 newtype NumCarbons = NumCarbons { getNumCarbons :: Int }
   deriving (Eq, Ord, Num)
@@ -18,9 +20,11 @@ instance Show NumDoubleBonds where
   show (NumDoubleBonds n) = show n
 
 data FattyAcyl = FattyAcyl {
-    numCarbons     :: NumCarbons
-  , numDoubleBonds :: NumDoubleBonds
+    _numCarbons     :: NumCarbons
+  , _numDoubleBonds :: NumDoubleBonds
 } deriving (Eq, Ord)
+
+makeClassy ''FattyAcyl
 
 instance Show FattyAcyl where
   show (FattyAcyl cs dbs) = show cs ++ ":" ++ show dbs
@@ -73,14 +77,21 @@ fattyAcidMonoisotopicMasses :: [MonoisotopicMass]
 fattyAcidMonoisotopicMasses = faMonoisotopicMass <$> fattyAcyls
 
 data TentativelyAssignedFA = TentativelyAssignedFA {
-    tentativelyAssignedFA :: Maybe FattyAcyl
-  , tentativelyAssignedFAIonInfo :: IonInfo
+    _getTentativelyAssignedFA :: Maybe FattyAcyl
+  , _tentativelyAssignedFAIonInfo :: IonInfo
 } deriving (Show, Eq, Ord) -- Maybe write my own Show instance.
 
+makeClassy ''TentativelyAssignedFA
+
+instance HasIonInfo TentativelyAssignedFA where
+  ionInfo = tentativelyAssignedFAIonInfo
+
 data TentativelyAssignedFAs = TentativelyAssignedFAs {
-    tentativelyAssignedFAsPrecIon :: Mz
-  , tentativelyAssignedFAs :: [TentativelyAssignedFA]
+    _tentativelyAssignedFAsPrecIon :: Mz
+  , _getTentativelyAssignedFAs :: [TentativelyAssignedFA]
 } deriving (Eq, Ord)
+
+makeClassy ''TentativelyAssignedFAs
 
 instance Show TentativelyAssignedFAs where
   show (TentativelyAssignedFAs p fas) =
@@ -104,4 +115,5 @@ toTentativelyAssignedFAs (NeutralLossSpectrum p nls) =
   TentativelyAssignedFAs p (neutralLossRowToFA <$> nls)
 
 collectFAs :: TentativelyAssignedFAs -> [FattyAcyl]
-collectFAs fas = catMaybes $ tentativelyAssignedFA <$> tentativelyAssignedFAs fas
+collectFAs fas =
+  catMaybes $ _getTentativelyAssignedFA <$> fas ^. getTentativelyAssignedFAs

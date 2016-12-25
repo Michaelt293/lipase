@@ -1,4 +1,4 @@
-
+{-# LANGUAGE TemplateHaskell #-}
 module Triacylglycerol where
 
 import FattyAcid
@@ -7,12 +7,15 @@ import Isotope
 import Data.List
 import Data.Maybe
 import Control.Monad
+import Control.Lens
 
 data Triacylglycerol = Triacylglycerol {
-    fa1 :: FattyAcyl
-  , fa2 :: FattyAcyl
-  , fa3 :: FattyAcyl
+    _fa1 :: FattyAcyl
+  , _fa2 :: FattyAcyl
+  , _fa3 :: FattyAcyl
 }
+
+makeClassy ''Triacylglycerol
 
 instance Eq Triacylglycerol where
   Triacylglycerol a1 b1 c1 == Triacylglycerol a2 b2 c2 =
@@ -46,8 +49,7 @@ possibleTAGs n prec fas = nub $ do
 findPossibleTAGs :: TentativelyAssignedFAs -> [Triacylglycerol]
 findPossibleTAGs fas =
   possibleTAGs 0.3
-               (monoisotopicMass'
-               (tentativelyAssignedFAsPrecIon fas))
+               (fas ^. tentativelyAssignedFAsPrecIon)
                (collectFAs fas)
 
 tagFAs :: Triacylglycerol -> [FattyAcyl]
@@ -61,7 +63,7 @@ data AssignedTAGs = AssignedTAGs {
 
 assignTAGs :: MSSpectrum -> TentativelyAssignedFAs -> AssignedTAGs
 assignTAGs spec fas =
-  AssignedTAGs (findPrecursorIon 0.3 (tentativelyAssignedFAsPrecIon fas) spec)
+  AssignedTAGs (findPrecursorIon 0.3 (fas ^. tentativelyAssignedFAsPrecIon) spec)
                (findPossibleTAGs fas)
                fas
 
@@ -96,4 +98,4 @@ correctionRatio :: AssignedTAGs -> Intensity -> Double
 correctionRatio (AssignedTAGs r _ _) (Intensity i) =
   case r of
     Nothing -> 0
-    Just r' -> (getIntensity . intensity . spectrumRowIonInfo) r' / i
+    Just r' -> getIntensity (r' ^. intensity) / i

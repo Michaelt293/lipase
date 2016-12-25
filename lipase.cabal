@@ -20,6 +20,7 @@ library
                      , FattyAcid
   build-depends:       base >= 4.7 && < 5
                      , containers
+                     , lens
                      , Chart
                      , isotope
                      , split
