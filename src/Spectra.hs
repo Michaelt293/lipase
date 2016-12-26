@@ -19,7 +19,7 @@ type Mz = MonoisotopicMass
 instance ShowVal MonoisotopicMass where
   showVal (MonoisotopicMass v) = show v
 
-newtype Intensity = Intensity { getIntensity :: Double }
+newtype Intensity = Intensity { _getIntensity :: Double }
   deriving (Show, Eq, Ord, Num, Fractional)
 
 makeClassy ''Intensity
@@ -104,19 +104,11 @@ instance HasIntensity SpectrumRow where
 instance Show SpectrumRow where
   show (SpectrumRow m i) = intercalate ", " [show m, show i]
 
-newtype SpectrumRows = SpectrumRows { _getSpectrumRows :: [SpectrumRow] }
-  deriving (Show, Eq, Ord)
-
-makeClassy ''SpectrumRows
-
-data MSSpectrum = MSSpectrum
-  { _msSpectrumSpectrumRows :: SpectrumRows }
+newtype MSSpectrum = MSSpectrum
+  { _msSpectrum :: [SpectrumRow] }
   deriving (Eq, Ord)
 
-makeClassy ''MSSpectrum
-
-instance HasSpectrumRows MSSpectrum where
-  spectrumRows = msSpectrumSpectrumRows
+makeLenses ''MSSpectrum
 
 sumIntensities' :: [(Mz, Intensity)] -> Intensity
 sumIntensities' = foldr (\(_, i) acc -> acc + i) 0
@@ -125,36 +117,34 @@ normalizedAbundances :: [(Mz, Intensity)] -> [NormalisedAbundance]
 normalizedAbundances spec =
   (\(_, i) ->
       NormalisedAbundance
-        (getIntensity i * 100 / getIntensity (sumIntensities' spec)))
+        (_getIntensity i * 100 / _getIntensity (sumIntensities' spec)))
         <$> spec
 
 relativeAbundances :: [(Mz, Intensity)] -> [RelativeAbundance]
 relativeAbundances spec =
   (\(_, i) ->
     RelativeAbundance
-      (getIntensity i * 100 / getIntensity (snd (maximumBy (comparing snd) spec))))
+      (_getIntensity i * 100 / maximumBy (comparing snd) spec ^._2 ^. getIntensity))
       <$> spec
 
-insertAbundances :: [(Mz, Intensity)] -> SpectrumRows
-insertAbundances spec = SpectrumRows $
+insertAbundances :: [(Mz, Intensity)] -> [SpectrumRow]
+insertAbundances spec =
   zipWith3 (\(a, b) c d -> SpectrumRow a (IonInfo b c d))
     spec
     (relativeAbundances spec)
     (normalizedAbundances spec)
 
-filterNormalisedAbundance :: NormalisedAbundance -> SpectrumRows -> SpectrumRows
-filterNormalisedAbundance abun spec = SpectrumRows $
-  filter (\r -> r ^. normalisedAbundance > abun) (spec ^. getSpectrumRows)
+filterNormalisedAbundance :: NormalisedAbundance -> [SpectrumRow] -> [SpectrumRow]
+filterNormalisedAbundance abun = filter (\r -> r ^. normalisedAbundance > abun)
 
-filterRelativeAbundance :: RelativeAbundance -> SpectrumRows -> SpectrumRows
-filterRelativeAbundance abun spec = SpectrumRows $
-  filter (\r -> r ^. relativeAbundance > abun) (spec ^. getSpectrumRows)
+filterRelativeAbundance :: RelativeAbundance -> [SpectrumRow] -> [SpectrumRow]
+filterRelativeAbundance abun = filter (\r -> r ^. relativeAbundance > abun)
 
 showList' :: (Show a) => [a] -> String
 showList' l = intercalate "\n" $ show <$> l
 
 class Spectrum a where
-  smap :: (SpectrumRows -> SpectrumRows) -> a -> a
+  smap :: ([SpectrumRow] -> [SpectrumRow]) -> a -> a
   filterByRelativeAbundance :: RelativeAbundance -> a -> a
   filterByNormalisedAbundance :: NormalisedAbundance -> a -> a
   selectRange :: Mz -> Mz -> a -> a
@@ -163,41 +153,33 @@ class Spectrum a where
   filterByNormalisedAbundance a = smap (filterNormalisedAbundance a)
   selectRange min' max' spec =
     recalculateAbundances $
-      smap (\x -> SpectrumRows
-                  (filter (\(SpectrumRow m _) -> m < max' && m > min')
-                  (x ^. getSpectrumRows))) spec
+      smap (filter (\(SpectrumRow m _) -> m < max' && m > min')) spec
   recalculateAbundances =
-    smap (\x -> insertAbundances
-                (fmap (\(SpectrumRow m i) -> (m, i ^. intensity))
-                                             (x ^. getSpectrumRows)))
-  {-# MINIMAL (smap) #-}
+    smap (insertAbundances . fmap (\(SpectrumRow m i) -> (m, i ^. intensity)))
 
 instance Spectrum MSSpectrum where
-  smap f spec = MSSpectrum $ f (spec ^. spectrumRows)
+  smap = over msSpectrum
 
 instance Show MSSpectrum where
-  show (MSSpectrum s) = "MS spectrum \n" ++ showList' (s ^. getSpectrumRows)
+  show (MSSpectrum s) = "MS spectrum \n" ++ showList' s
 
 data MS2Spectrum = MS2Spectrum {
     _precursorMz :: Mz
-  , _ms2SpectrumRows :: SpectrumRows
+  , _ms2Spectrum :: [SpectrumRow]
 } deriving (Eq, Ord)
 
-makeClassy ''MS2Spectrum
+makeLenses ''MS2Spectrum
 
 instance HasMonoisotopicMass MS2Spectrum where
   monoisotopicMass = precursorMz
 
-instance HasSpectrumRows MS2Spectrum where
-  spectrumRows = ms2SpectrumRows
-
 instance Show MS2Spectrum where
   show (MS2Spectrum p s) =
      "MS2 spectrum \n" ++ "precursor ion: " ++ show p ++ "\n" ++
-     showList' (s ^. getSpectrumRows)
+     showList' s
 
 instance Spectrum MS2Spectrum where
-  smap f spec = MS2Spectrum (spec ^. precursorMz) $ f (spec ^. spectrumRows)
+  smap = over ms2Spectrum
 
 removePrecursorIon :: MS2Spectrum -> MS2Spectrum
 removePrecursorIon spec =
@@ -206,7 +188,7 @@ removePrecursorIon spec =
 
 calNeutralLosses :: MS2Spectrum -> [MonoisotopicMass]
 calNeutralLosses (MS2Spectrum p s) =
-  fmap (\r -> p |-| r ^. mz) (s ^. getSpectrumRows)
+  fmap (\r -> p |-| r ^. mz) s
 
 data NeutralLossRow = NeutralLossRow {
     _neutralLoss :: MonoisotopicMass
@@ -223,7 +205,7 @@ data NeutralLossSpectrum = NeutralLossSpectrum {
   , _getNeutralLossSpectrum :: [NeutralLossRow]
   } deriving (Eq, Ord)
 
-makeClassy ''NeutralLossSpectrum
+makeLenses ''NeutralLossSpectrum
 
 instance HasMonoisotopicMass NeutralLossSpectrum where
   monoisotopicMass = nLPrecursorMz
@@ -237,7 +219,7 @@ instance Show NeutralLossSpectrum where
 toNeutralLossSpectrum :: MS2Spectrum -> NeutralLossSpectrum
 toNeutralLossSpectrum (MS2Spectrum prec spec) = NeutralLossSpectrum prec
  ((\(SpectrumRow m i) ->
-   NeutralLossRow (prec |-| m) i) <$> (spec ^. getSpectrumRows))
+   NeutralLossRow (prec |-| m) i) <$> spec)
 
 -- Reads spectrum from CSV file
 readSpectrum :: [[String]] -> [(Mz, Intensity)]
@@ -260,4 +242,6 @@ findPrecursorIon n m (MSSpectrum spec) =
       maximumBy (comparing (^. intensity)) filteredSpectrumRows
   where
     filteredSpectrumRows :: [SpectrumRow]
-    filteredSpectrumRows = filter (\x -> withinTolerance n m (x ^. mz)) (spec ^. getSpectrumRows)
+    filteredSpectrumRows = filter
+                             (\x -> withinTolerance n m (x ^. mz))
+                             spec

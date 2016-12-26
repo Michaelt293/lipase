@@ -3,7 +3,8 @@ module Triacylglycerol where
 
 import FattyAcid
 import Spectra
-import Isotope
+import Isotope hiding (monoisotopicMass)
+import qualified Isotope as I
 import Data.List
 import Data.Maybe
 import Control.Monad
@@ -43,37 +44,42 @@ possibleTAGs n prec fas = nub $ do
   fa1 <- fas
   fa2 <- fas
   fa3 <- fas
-  guard (withinTolerance n prec (monoisotopicMass (Triacylglycerol fa1 fa2 fa3)))
+  guard (withinTolerance n prec (I.monoisotopicMass (Triacylglycerol fa1 fa2 fa3)))
   return $ Triacylglycerol fa1 fa2 fa3
 
-findPossibleTAGs :: TentativelyAssignedFAs -> [Triacylglycerol]
+findPossibleTAGs :: AssignedFAs -> [Triacylglycerol]
 findPossibleTAGs fas =
   possibleTAGs 0.3
-               (fas ^. tentativelyAssignedFAsPrecIon)
+               (fas ^. assignedFAsPrecIon)
                (collectFAs fas)
 
 tagFAs :: Triacylglycerol -> [FattyAcyl]
 tagFAs (Triacylglycerol fa1 fa2 fa3) = nub [fa1, fa2, fa3]
 
 data AssignedTAGs = AssignedTAGs {
-    spectrumRow :: Maybe SpectrumRow
-  , tags :: [Triacylglycerol]
-  , assignedFAs :: TentativelyAssignedFAs
+    _tagSpectrumRow :: Maybe SpectrumRow
+  , _tags :: [Triacylglycerol]
+  , _tagAssignedFAs :: AssignedFAs
 } deriving (Show, Eq, Ord)
 
-assignTAGs :: MSSpectrum -> TentativelyAssignedFAs -> AssignedTAGs
+makeLenses ''AssignedTAGs
+
+instance HasAssignedFAs AssignedTAGs where
+  assignedFAs = tagAssignedFAs
+
+assignTAGs :: MSSpectrum -> AssignedFAs -> AssignedTAGs
 assignTAGs spec fas =
-  AssignedTAGs (findPrecursorIon 0.3 (fas ^. tentativelyAssignedFAsPrecIon) spec)
+  AssignedTAGs (findPrecursorIon 0.3 (fas ^. assignedFAsPrecIon) spec)
                (findPossibleTAGs fas)
                fas
 
 allTentativelyAssignedFAs :: [AssignedTAGs] -> [FattyAcyl]
 allTentativelyAssignedFAs tgs =
   sort . nub . catMaybes $
-    tentativelyAssignedFA <$> concat (tentativelyAssignedFAs . assignedFAs <$> tgs)
+    _getAssignedFA <$> concat (_getAssignedFAs . _tagAssignedFAs <$> tgs)
 
 allAssignedTAGs :: [AssignedTAGs] -> [Triacylglycerol]
-allAssignedTAGs tgs = sort . nub . concat $ tags <$> tgs
+allAssignedTAGs tgs = sort . nub . concat $ _tags <$> tgs
 
 allTagFAs :: [AssignedTAGs] -> [FattyAcyl]
 allTagFAs tgs = sort . nub . concat $ tagFAs <$> allAssignedTAGs tgs
@@ -91,11 +97,11 @@ normalisedAbundanceFAsIndentified (AssignedTAGs _ _ fas) =
     else sum normalisedAbundList
   where
     normalisedAbundList =
-      normalisedAbundance . tentativelyAssignedFAIonInfo <$>
-      filter (isJust . tentativelyAssignedFA) (tentativelyAssignedFAs fas)
+      _ionInfoNormalisedAbundance . _assignedFAIonInfo <$>
+      filter (isJust . _getAssignedFA) (fas ^. getAssignedFAs)
 
 correctionRatio :: AssignedTAGs -> Intensity -> Double
 correctionRatio (AssignedTAGs r _ _) (Intensity i) =
   case r of
     Nothing -> 0
-    Just r' -> getIntensity (r' ^. intensity) / i
+    Just r' ->  (r' ^. getIntensity) / i
