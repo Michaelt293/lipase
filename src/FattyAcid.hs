@@ -6,6 +6,7 @@ import qualified Isotope as I
 import Isotope hiding (monoisotopicMass)
 import Spectra
 import Data.Maybe
+import Data.Monoid
 import Control.Lens
 
 newtype NumCarbons = NumCarbons { _getNumCarbons :: Int }
@@ -38,12 +39,12 @@ instance HasNumDoubleBonds FattyAcyl where
   numDoubleBonds = fattyAcylDoubleBonds
 
 instance Show FattyAcyl where
-  show (FattyAcyl cs dbs) = showVal cs ++ ":" ++ showVal dbs
+  show (FattyAcyl cs dbs) = showVal cs <> ":" <> showVal dbs
 
 instance ToMolecularFormula FattyAcyl where
   toMolecularFormula (FattyAcyl cs dbs) = mkMolecularFormula
-    [ (C, _getNumCarbons cs)
-    , (H, _getNumCarbons cs * 2 + 1 - _getNumDoubleBonds dbs * 2)
+    [ (C, cs^.getNumCarbons)
+    , (H, cs^.getNumCarbons.to (\x -> x * 2 + 1) - dbs^.getNumDoubleBonds.to (*2))
     , (O, 2)
     ]
 
@@ -73,13 +74,13 @@ c21s = FattyAcyl 21 <$> [0, 1]
 c22s = FattyAcyl 22 <$> [0, 1, 2, 3, 4, 5, 6]
 
 evenChainFAs :: [FattyAcyl]
-evenChainFAs = [c10_0, c12_0] ++ c14s ++ c16s ++ c18s ++ c20s ++ c22s
+evenChainFAs = [c10_0, c12_0] <> c14s <> c16s <> c18s <> c20s <> c22s
 
 oddChainFAs :: [FattyAcyl]
-oddChainFAs = c15s ++ c17s ++ c19s ++ c21s
+oddChainFAs = c15s <> c17s <> c19s <> c21s
 
 fattyAcyls :: [FattyAcyl]
-fattyAcyls = evenChainFAs ++ oddChainFAs
+fattyAcyls = evenChainFAs <> oddChainFAs
 
 faMonoisotopicMass :: FattyAcyl -> MonoisotopicMass
 faMonoisotopicMass fa = I.monoisotopicMass fa |+| I.monoisotopicMass H
@@ -109,7 +110,7 @@ instance HasMonoisotopicMass AssignedFAs where
 
 instance Show AssignedFAs where
   show (AssignedFAs p fas) =
-    "Precursor ion: " ++ show p ++ "\n" ++
+    "Precursor ion: " <> show p <> "\n" <>
     showList' fas
 
 assignFA :: Double -> MonoisotopicMass -> [FattyAcyl] -> Maybe FattyAcyl

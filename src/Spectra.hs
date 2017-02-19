@@ -6,6 +6,7 @@ module Spectra where
 import Isotope hiding (monoisotopicMass)
 import Data.List
 import Data.Ord
+import Data.Monoid
 import Numeric
 import Control.Lens
 
@@ -124,7 +125,7 @@ relativeAbundances :: [(Mz, Intensity)] -> [RelativeAbundance]
 relativeAbundances spec =
   (\(_, i) ->
     RelativeAbundance
-      (_getIntensity i * 100 / maximumBy (comparing snd) spec ^._2 ^. getIntensity))
+      (_getIntensity i * 100 / maximumBy (comparing snd) spec ^._2.getIntensity))
       <$> spec
 
 insertAbundances :: [(Mz, Intensity)] -> [SpectrumRow]
@@ -161,7 +162,7 @@ instance Spectrum MSSpectrum where
   smap = over msSpectrum
 
 instance Show MSSpectrum where
-  show (MSSpectrum s) = "MS spectrum \n" ++ showList' s
+  show (MSSpectrum s) = "MS spectrum \n" <> showList' s
 
 data MS2Spectrum = MS2Spectrum {
     _precursorMz :: Mz
@@ -175,7 +176,8 @@ instance HasMonoisotopicMass MS2Spectrum where
 
 instance Show MS2Spectrum where
   show (MS2Spectrum p s) =
-     "MS2 spectrum \n" ++ "precursor ion: " ++ show p ++ "\n" ++
+     "MS2 spectrum \n" <>
+     "precursor ion: " <> show p <> "\n" <>
      showList' s
 
 instance Spectrum MS2Spectrum where
@@ -212,8 +214,8 @@ instance HasMonoisotopicMass NeutralLossSpectrum where
 
 instance Show NeutralLossSpectrum where
   show (NeutralLossSpectrum n s) =
-     "Neutral loss spectrum \n" ++
-     "precursor ion: " ++ show n ++ "\n" ++
+     "Neutral loss spectrum \n" <>
+     "precursor ion: " <> show n <> "\n" <>
      showList' s
 
 toNeutralLossSpectrum :: MS2Spectrum -> NeutralLossSpectrum

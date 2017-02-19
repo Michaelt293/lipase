@@ -25,12 +25,12 @@ main = do
         where findPrecursorIonMz fileName =
                 (MonoisotopicMass . read . takeWhile isDigit $
                  dropWhile (not . isDigit) fileName) |+| MonoisotopicMass 0.5 -- maybe don't hard code this value
-  let readCsv = readFile . (\x -> dir ++ "/" ++ x)
+  let readCsv = readFile . (\x -> dir <> "/" <> x)
   unprocessMsSpectrum <- readCsv msSpectrumFile
   unprocessMs2Spectrum <- traverse readCsv ms2SpectraFiles
   let processCsv csv =  splitOn "," <$> drop 2 (lines csv)
   let msSpectrum = MSSpectrum . insertAbundances . readSpectrum . processCsv $ unprocessMsSpectrum
-  let ms2Spectra = zipWith
+  let ms2Spectra = sort $ zipWith
                      MS2Spectrum
                      precursorIonsMz
                      (insertAbundances . readSpectrum . processCsv <$> unprocessMs2Spectrum)
@@ -39,11 +39,11 @@ main = do
   let tentativelyAssignFAs = toAssignedFAs <$> neutralLossSpectra
   let finalResult = assignTAGs msSpectrum <$> tentativelyAssignFAs
   putStrLn "Fatty acids in the search list"
-  print fattyAcyls
+  print $ sort fattyAcyls
   putStrLn "Total tentatively assigned fatty acids"
   print $ allTentativelyAssignedFAs finalResult
   putStrLn "Total assigned triacylglycerols"
   print $ allAssignedTAGs finalResult
   putStrLn "Total triacylglycerol fatty acids"
   print $ allTagFAs finalResult
-  print $ showVal . normalisedAbundanceFAsIndentified <$> finalResult
+  putStrLn . showList' $ formatNormalisedAbundanceFAsIndentified <$> finalResult

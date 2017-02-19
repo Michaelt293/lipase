@@ -7,6 +7,7 @@ import Isotope hiding (monoisotopicMass)
 import qualified Isotope as I
 import Data.List
 import Data.Maybe
+import Data.Monoid
 import Control.Monad
 import Control.Lens
 
@@ -18,6 +19,11 @@ data Triacylglycerol = Triacylglycerol {
 
 makeClassy ''Triacylglycerol
 
+allFAs :: Applicative f =>
+  (FattyAcyl -> f FattyAcyl) -> Triacylglycerol -> f Triacylglycerol
+allFAs f (Triacylglycerol fa1 fa2 fa3) =
+  Triacylglycerol <$> f fa1 <*> f fa2 <*> f fa3
+
 instance Eq Triacylglycerol where
   Triacylglycerol a1 b1 c1 == Triacylglycerol a2 b2 c2 =
     sort [a1, b1, c1] == sort [a2, b2, c2]
@@ -28,7 +34,7 @@ instance Ord Triacylglycerol where
 
 instance Show Triacylglycerol where
   show (Triacylglycerol a b c) =
-    "TG(" ++ intercalate "_" (show <$> sort [a, b, c]) ++ ")"
+    "TG(" <> intercalate "_" (show <$> sort [a, b, c]) <> ")"
 
 instance ToMolecularFormula Triacylglycerol where
   toMolecularFormula (Triacylglycerol a b c) =
@@ -67,6 +73,9 @@ makeLenses ''AssignedTAGs
 instance HasAssignedFAs AssignedTAGs where
   assignedFAs = tagAssignedFAs
 
+instance HasMonoisotopicMass AssignedTAGs where
+  monoisotopicMass = assignedFAs.monoisotopicMass
+
 assignTAGs :: MSSpectrum -> AssignedFAs -> AssignedTAGs
 assignTAGs spec fas =
   AssignedTAGs (findPrecursorIon 0.3 (fas ^. assignedFAsPrecIon) spec)
@@ -91,17 +100,32 @@ totalTagIntensity = foldMap intensity'
     intensity' (AssignedTAGs Nothing _ _) = Intensity 0
 
 normalisedAbundanceFAsIndentified :: AssignedTAGs -> NormalisedAbundance
-normalisedAbundanceFAsIndentified (AssignedTAGs _ _ fas) =
+normalisedAbundanceFAsIndentified tags =
   if null normalisedAbundList
     then 0
     else sum normalisedAbundList
   where
     normalisedAbundList =
       _ionInfoNormalisedAbundance . _assignedFAIonInfo <$>
-      filter (isJust . _getAssignedFA) (fas ^. getAssignedFAs)
+      filter (isJust . _getAssignedFA) (tags ^. getAssignedFAs)
+
+formatNormalisedAbundanceFAsIndentified tags =
+  tags^.monoisotopicMass.to showVal <> ", " <> (showVal . normalisedAbundanceFAsIndentified $ tags)
 
 correctionRatio :: AssignedTAGs -> Intensity -> Double
 correctionRatio (AssignedTAGs r _ _) (Intensity i) =
-  case r of
-    Nothing -> 0
-    Just r' ->  (r' ^. getIntensity) / i
+  maybe 0 (\x -> (x ^. getIntensity) / i) r
+
+data FinalResult = FinalResult {
+    _finalResultMz :: Mz
+  , _finalResultFAs :: [(Maybe FattyAcyl, NormalisedAbundance, NormalisedAbundance)]
+  , _finalResultTags :: [Triacylglycerol]
+} deriving (Show, Eq, Ord)
+
+makeLenses ''FinalResult
+
+toFinalResult :: AssignedTAGs -> Double -> FinalResult
+toFinalResult tgs r =
+  FinalResult (tgs^.monoisotopicMass)
+              (catMaybes (over (assignedFAs.getAssignedFAs.traverse.getAssignedFA) id tgs), undefined, undefined)
+              (tgs^.tags)
