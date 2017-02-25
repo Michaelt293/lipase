@@ -8,6 +8,7 @@ import System.Environment
 import Data.List
 import Data.Char
 import Data.Maybe
+import Data.Monoid
 import System.Directory
 import Data.List.Split
 
