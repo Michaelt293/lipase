@@ -131,4 +131,4 @@ toAssignedFAs (NeutralLossSpectrum p nls) =
 
 collectFAs :: AssignedFAs -> [FattyAcyl]
 collectFAs fas =
-  catMaybes $ _getAssignedFA <$> fas ^. getAssignedFAs
+  catMaybes $ fas ^.. getAssignedFAs.traverse.getAssignedFA

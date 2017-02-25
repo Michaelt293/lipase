@@ -118,14 +118,14 @@ normalizedAbundances :: [(Mz, Intensity)] -> [NormalisedAbundance]
 normalizedAbundances spec =
   (\(_, i) ->
       NormalisedAbundance
-        (_getIntensity i * 100 / _getIntensity (sumIntensities' spec)))
+        (i^.getIntensity * 100 /  sumIntensities' spec ^.getIntensity))
         <$> spec
 
 relativeAbundances :: [(Mz, Intensity)] -> [RelativeAbundance]
 relativeAbundances spec =
   (\(_, i) ->
     RelativeAbundance
-      (_getIntensity i * 100 / maximumBy (comparing snd) spec ^._2.getIntensity))
+      (i^.getIntensity * 100 / maximumBy (comparing snd) spec^._2.getIntensity))
       <$> spec
 
 insertAbundances :: [(Mz, Intensity)] -> [SpectrumRow]

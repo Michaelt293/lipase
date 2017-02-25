@@ -86,7 +86,7 @@ assignTAGs spec fas =
 allTentativelyAssignedFAs :: [AssignedTAGs] -> [FattyAcyl]
 allTentativelyAssignedFAs tgs =
   sort . nub . catMaybes $
-    _getAssignedFA <$> concat (_getAssignedFAs . _tagAssignedFAs <$> tgs)
+    tgs^..traverse.tagAssignedFAs.getAssignedFAs.traverse.getAssignedFA
 
 allAssignedTAGs :: [AssignedTAGs] -> [Triacylglycerol]
 allAssignedTAGs tgs = sort . nub . concat $ _tags <$> tgs
@@ -97,8 +97,8 @@ allTagFAs tgs = sort . nub . concat $ tagFAs <$> allAssignedTAGs tgs
 totalTagIntensity :: [AssignedTAGs] -> Intensity
 totalTagIntensity = foldMap intensity'
   where
-    intensity' (AssignedTAGs (Just sr) _ _) = sr^.intensity
-    intensity' (AssignedTAGs Nothing _ _) = Intensity 0
+    intensity' (AssignedTAGs specRow _ _) =
+      maybe (Intensity 0) (^.intensity) specRow
 
 normalisedAbundanceFAsIndentified :: AssignedTAGs -> NormalisedAbundance
 normalisedAbundanceFAsIndentified tags =
@@ -119,10 +119,10 @@ relativeAbundanceOfTags :: [AssignedTAGs] -> [Double]
 relativeAbundanceOfTags tgs =
   correctionRatio (totalTagIntensity tgs) <$> tgs
 
-collectAssignedTagsFas :: AssignedTAGs -> [(FattyAcyl, NormalisedAbundance)]
-collectAssignedTagsFas tgs = first fromJust <$> (filter (\(fa, _) -> isJust fa) $ --(\(fa, na) -> (fromJust fa, na))
-  (\x -> (_getAssignedFA x, (_ionInfoNormalisedAbundance ._assignedFAIonInfo) x))
-    <$> assignedFAList)
+--collectAssignedTagsFas :: AssignedTAGs -> [(FattyAcyl, NormalisedAbundance)]
+collectAssignedTagsFas tgs = first fromJust <$> filter (\(fa, _) -> isJust fa)
+  (zip (assignedFAList^..traverse.getAssignedFA)
+       (assignedFAList^..traverse.assignedFAIonInfo.ionInfoNormalisedAbundance))
   where assignedFAList = tgs^.tagAssignedFAs.getAssignedFAs
 
 data FinalResult = FinalResult {
@@ -143,3 +143,9 @@ toFinalResult ti tgs =
 
 finalResults :: [AssignedTAGs] -> [FinalResult]
 finalResults tgs = toFinalResult (totalTagIntensity tgs) <$> tgs
+
+tagMzNormalisedAbundances frs =
+  (\x -> showVal (x^.finalResultMz) <> ": " <> take 4 (show (100 * x^.finalResultMzrelativeAbundance)))
+    <$> frs
+
+sumShouldEqual1 frs = sum $ frs^..traverse.finalResultMzrelativeAbundance

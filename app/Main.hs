@@ -39,12 +39,16 @@ main = do
   let neutralLossSpectra = toNeutralLossSpectrum <$> filteredMS2Spectra
   let tentativelyAssignFAs = toAssignedFAs <$> neutralLossSpectra
   let finalResult = assignTAGs msSpectrum <$> tentativelyAssignFAs
+  let finalResult' = finalResults finalResult
   putStrLn "Fatty acids in the search list"
   print $ sort fattyAcyls
   putStrLn "Total tentatively assigned fatty acids"
   print $ allTentativelyAssignedFAs finalResult
-  putStrLn "Total assigned triacylglycerols"
-  print $ allAssignedTAGs finalResult
-  putStrLn "Total triacylglycerol fatty acids"
-  print $ allTagFAs finalResult
-  putStrLn . showList' $ formatNormalisedAbundanceFAsIndentified <$> finalResult
+  mapM_ putStrLn $ tagMzNormalisedAbundances finalResult'
+  print $ sumShouldEqual1 finalResult'
+
+  --putStrLn "Total assigned triacylglycerols"
+  --print $ allAssignedTAGs finalResult
+  --putStrLn "Total triacylglycerol fatty acids"
+  --print $ allTagFAs finalResult
+  --putStrLn . showList' $ formatNormalisedAbundanceFAsIndentified <$> finalResult
