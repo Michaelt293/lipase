@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-7.7
+resolver: nightly-2017-02-25
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -37,7 +37,6 @@ resolver: lts-7.7
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - location: .
-- location: /Users/michaelthomas/src/isotope
 #    git: git@github.com:Michaelt293/isotope.git
 #    commit: b239442648d3efe0ca89a05439a80fa107f16114
 # Dependency packages to be pulled from upstream that are not in the resolver
