@@ -1,34 +1,50 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 module FattyAcid where
 
-import Isotope
+import qualified Isotope as I
+import Isotope hiding (monoisotopicMass)
 import Spectra
 import Data.Maybe
+import Data.Monoid
+import Control.Lens
 
-newtype NumCarbons = NumCarbons { getNumCarbons :: Int }
-  deriving (Eq, Ord, Num)
+newtype NumCarbons = NumCarbons { _getNumCarbons :: Int }
+  deriving (Show, Eq, Ord, Num)
 
-instance Show NumCarbons where
-  show (NumCarbons n) = show n
+makeClassy ''NumCarbons
 
-newtype NumDoubleBonds = NumDoubleBonds { getNumDoubleBonds :: Int }
-  deriving (Eq, Ord, Num)
+instance ShowVal NumCarbons where
+  showVal (NumCarbons n) = show n
 
-instance Show NumDoubleBonds where
-  show (NumDoubleBonds n) = show n
+newtype NumDoubleBonds = NumDoubleBonds { _getNumDoubleBonds :: Int }
+  deriving (Show, Eq, Ord, Num)
+
+makeClassy ''NumDoubleBonds
+
+instance ShowVal NumDoubleBonds where
+  showVal (NumDoubleBonds n) = show n
 
 data FattyAcyl = FattyAcyl {
-    numCarbons     :: NumCarbons
-  , numDoubleBonds :: NumDoubleBonds
+    _fattyAcylCarbons     :: NumCarbons
+  , _fattyAcylDoubleBonds :: NumDoubleBonds
 } deriving (Eq, Ord)
 
+makeClassy ''FattyAcyl
+
+instance HasNumCarbons FattyAcyl where
+  numCarbons = fattyAcylCarbons
+
+instance HasNumDoubleBonds FattyAcyl where
+  numDoubleBonds = fattyAcylDoubleBonds
+
 instance Show FattyAcyl where
-  show (FattyAcyl cs dbs) = show cs ++ ":" ++ show dbs
+  show (FattyAcyl cs dbs) = showVal cs <> ":" <> showVal dbs
 
 instance ToMolecularFormula FattyAcyl where
   toMolecularFormula (FattyAcyl cs dbs) = mkMolecularFormula
-    [ (C, getNumCarbons cs)
-    , (H, getNumCarbons cs * 2 + 1 - getNumDoubleBonds dbs * 2)
+    [ (C, cs^.getNumCarbons)
+    , (H, cs^.getNumCarbons.to (\x -> x * 2 + 1) - dbs^.getNumDoubleBonds.to (*2))
     , (O, 2)
     ]
 
@@ -58,33 +74,43 @@ c21s = FattyAcyl 21 <$> [0, 1]
 c22s = FattyAcyl 22 <$> [0, 1, 2, 3, 4, 5, 6]
 
 evenChainFAs :: [FattyAcyl]
-evenChainFAs = [c10_0, c12_0] ++ c14s ++ c16s ++ c18s ++ c20s ++ c22s
+evenChainFAs = [c10_0, c12_0] <> c14s <> c16s <> c18s <> c20s <> c22s
 
 oddChainFAs :: [FattyAcyl]
-oddChainFAs = c15s ++ c17s ++ c19s ++ c21s
+oddChainFAs = c15s <> c17s <> c19s <> c21s
 
 fattyAcyls :: [FattyAcyl]
-fattyAcyls = evenChainFAs ++ oddChainFAs
+fattyAcyls = evenChainFAs <> oddChainFAs
 
 faMonoisotopicMass :: FattyAcyl -> MonoisotopicMass
-faMonoisotopicMass fa = monoisotopicMass fa |+| monoisotopicMass H
+faMonoisotopicMass fa = I.monoisotopicMass fa |+| I.monoisotopicMass H
 
 fattyAcidMonoisotopicMasses :: [MonoisotopicMass]
 fattyAcidMonoisotopicMasses = faMonoisotopicMass <$> fattyAcyls
 
-data TentativelyAssignedFA = TentativelyAssignedFA {
-    tentativelyAssignedFA :: Maybe FattyAcyl
-  , tentativelyAssignedFAIonInfo :: IonInfo
+data AssignedFA = AssignedFA {
+    _getAssignedFA :: Maybe FattyAcyl
+  , _assignedFAIonInfo :: IonInfo
 } deriving (Show, Eq, Ord) -- Maybe write my own Show instance.
 
-data TentativelyAssignedFAs = TentativelyAssignedFAs {
-    tentativelyAssignedFAsPrecIon :: Mz
-  , tentativelyAssignedFAs :: [TentativelyAssignedFA]
+makeClassy ''AssignedFA
+
+instance HasIonInfo AssignedFA where
+  ionInfo = assignedFAIonInfo
+
+data AssignedFAs = AssignedFAs {
+    _assignedFAsPrecIon :: Mz
+  , _getAssignedFAs :: [AssignedFA]
 } deriving (Eq, Ord)
 
-instance Show TentativelyAssignedFAs where
-  show (TentativelyAssignedFAs p fas) =
-    "Precursor ion: " ++ show p ++ "\n" ++
+makeClassy ''AssignedFAs
+
+instance HasMonoisotopicMass AssignedFAs where
+  monoisotopicMass = assignedFAsPrecIon
+
+instance Show AssignedFAs where
+  show (AssignedFAs p fas) =
+    "Precursor ion: " <> show p <> "\n" <>
     showList' fas
 
 assignFA :: Double -> MonoisotopicMass -> [FattyAcyl] -> Maybe FattyAcyl
@@ -95,13 +121,14 @@ assignFA n m fas =
               then Just f
               else assignFA n m fs
 
-neutralLossRowToFA :: NeutralLossRow -> TentativelyAssignedFA
+neutralLossRowToFA :: NeutralLossRow -> AssignedFA
 neutralLossRowToFA (NeutralLossRow nl i) =
-  TentativelyAssignedFA (assignFA 0.3 nl fattyAcyls) i
+  AssignedFA (assignFA 0.3 nl fattyAcyls) i
 
-toTentativelyAssignedFAs :: NeutralLossSpectrum -> TentativelyAssignedFAs
-toTentativelyAssignedFAs (NeutralLossSpectrum p nls) =
-  TentativelyAssignedFAs p (neutralLossRowToFA <$> nls)
+toAssignedFAs :: NeutralLossSpectrum -> AssignedFAs
+toAssignedFAs (NeutralLossSpectrum p nls) =
+  AssignedFAs p (neutralLossRowToFA <$> nls)
 
-collectFAs :: TentativelyAssignedFAs -> [FattyAcyl]
-collectFAs fas = catMaybes $ tentativelyAssignedFA <$> tentativelyAssignedFAs fas
+collectFAs :: AssignedFAs -> [FattyAcyl]
+collectFAs fas =
+  catMaybes $ fas ^.. getAssignedFAs.traverse.getAssignedFA
