@@ -45,7 +45,9 @@ main = do
   putStrLn "Total tentatively assigned fatty acids"
   print $ allTentativelyAssignedFAs finalResult
   mapM_ putStrLn $ tagMzNormalisedAbundances finalResult'
-  print $ sumShouldEqual1 finalResult'
+  --print $ sumShouldEqual1 finalResult'
+  mapM_ (putStrLn . renderFattyAcylNormalisedAbundance) $ accumulateNormalisedAbundance finalResult'
+
 
   --putStrLn "Total assigned triacylglycerols"
   --print $ allAssignedTAGs finalResult

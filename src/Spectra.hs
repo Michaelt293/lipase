@@ -35,7 +35,7 @@ instance ShowVal Intensity where
 -- formatFloatN floatNum numOfDecimal = showFFloat (Just numOfDecimals) floatNum ""
 
 newtype RelativeAbundance = RelativeAbundance {
-  getRelativeAbundance :: Double
+  _getRelativeAbundance :: Double
 } deriving (Show, Eq, Ord, Num, Fractional) -- write show instance, 2 d.p, add "%"
 
 makeClassy ''RelativeAbundance
@@ -48,7 +48,7 @@ instance ShowVal RelativeAbundance where
   showVal (RelativeAbundance v) = show v
 
 newtype NormalisedAbundance =  NormalisedAbundance {
-  getNormalisedAbundance :: Double -- write show instance, 2 d.p, add "%"
+  _getNormalisedAbundance :: Double -- write show instance, 2 d.p, add "%"
 } deriving (Show, Eq, Ord, Num, Fractional)
 
 makeClassy ''NormalisedAbundance

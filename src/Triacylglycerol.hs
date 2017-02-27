@@ -8,6 +8,7 @@ import qualified Isotope as I
 import Data.List
 import Data.Maybe
 import Data.Monoid
+import Data.Ord
 import Control.Monad
 import Control.Lens
 import Control.Arrow
@@ -149,3 +150,25 @@ tagMzNormalisedAbundances frs =
     <$> frs
 
 sumShouldEqual1 frs = sum $ frs^..traverse.finalResultMzrelativeAbundance
+
+-- | Sort, then group
+-- from Data.List.HIUtils
+aggregateBy :: (a -> a -> Ordering) -> [a] -> [[a]]
+aggregateBy x = groupBy (\a b -> x a b == EQ) . sortBy x
+
+-- | Aggregate an association list, such that keys become unique.
+-- from Data.List.HIUtils
+aggregateAL :: (Ord a) => [(a,b)] -> [(a,[b])]
+aggregateAL = fmap (fst . head &&& fmap snd) . aggregateBy (comparing fst)
+
+reCalNormalisedAbundance :: Double -> [(FattyAcyl, NormalisedAbundance)] -> [(FattyAcyl, NormalisedAbundance)]
+reCalNormalisedAbundance n = mapped._2.getNormalisedAbundance %~ (*n)
+
+accumulateNormalisedAbundance :: [FinalResult] -> [(FattyAcyl, NormalisedAbundance)]
+accumulateNormalisedAbundance frs = mapped._2 %~ sum $ aggResult
+  where
+    aggResult = aggregateAL . concat $
+      zipWith reCalNormalisedAbundance (frs^..traverse.finalResultMzrelativeAbundance) (frs^..traverse.finalResultFAs)
+
+renderFattyAcylNormalisedAbundance :: (FattyAcyl, NormalisedAbundance) -> String
+renderFattyAcylNormalisedAbundance (fa, na) = show fa <> ", " <> showVal na 
