@@ -120,11 +120,13 @@ relativeAbundanceOfTags :: [AssignedTAGs] -> [Double]
 relativeAbundanceOfTags tgs =
   correctionRatio (totalTagIntensity tgs) <$> tgs
 
---collectAssignedTagsFas :: AssignedTAGs -> [(FattyAcyl, NormalisedAbundance)]
-collectAssignedTagsFas tgs = first fromJust <$> filter (\(fa, _) -> isJust fa)
-  (zip (assignedFAList^..traverse.getAssignedFA)
-       (assignedFAList^..traverse.assignedFAIonInfo.ionInfoNormalisedAbundance))
-  where assignedFAList = tgs^.tagAssignedFAs.getAssignedFAs
+collectAssignedTagsFas :: AssignedTAGs -> [(FattyAcyl, NormalisedAbundance)]
+collectAssignedTagsFas tgs = [ (fa, na) | (Just fa, na) <- fattyAcylNormAbun]
+  where
+    assignedFAList = tgs^.tagAssignedFAs.getAssignedFAs
+    fattyAcylNormAbun =
+       zip (assignedFAList^..traverse.getAssignedFA)
+           (assignedFAList^..traverse.assignedFAIonInfo.ionInfoNormalisedAbundance)
 
 data FinalResult = FinalResult {
     _finalResultMz :: Mz
@@ -171,4 +173,4 @@ accumulateNormalisedAbundance frs = mapped._2 %~ sum $ aggResult
       zipWith reCalNormalisedAbundance (frs^..traverse.finalResultMzrelativeAbundance) (frs^..traverse.finalResultFAs)
 
 renderFattyAcylNormalisedAbundance :: (FattyAcyl, NormalisedAbundance) -> String
-renderFattyAcylNormalisedAbundance (fa, na) = show fa <> ", " <> showVal na 
+renderFattyAcylNormalisedAbundance (fa, na) = show fa <> ", " <> showVal na
