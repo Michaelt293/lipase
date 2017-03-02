@@ -23,6 +23,7 @@ library
                      , lens
                      , isotope
                      , split
+                     , hinduce-missingh
   default-language:    Haskell2010
 
 executable lipase-exe
