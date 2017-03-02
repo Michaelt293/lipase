@@ -27,23 +27,26 @@ allFAs f (Triacylglycerol fa1 fa2 fa3) =
   Triacylglycerol <$> f fa1 <*> f fa2 <*> f fa3
 
 instance Eq Triacylglycerol where
-  Triacylglycerol a1 b1 c1 == Triacylglycerol a2 b2 c2 =
-    sort [a1, b1, c1] == sort [a2, b2, c2]
+  tg1 == tg2 = sort (tg1^..allFAs) == sort (tg2^..allFAs)
 
 instance Ord Triacylglycerol where
-  Triacylglycerol a1 b1 c1 <= Triacylglycerol a2 b2 c2 =
-    sort [a1, b1, c1] <= sort [a2, b2, c2]
+  tg1 <= tg2 = sort (tg1^..allFAs) <= sort (tg2^..allFAs)
 
 instance Show Triacylglycerol where
-  show (Triacylglycerol a b c) =
-    "TG(" <> intercalate "_" (show <$> sort [a, b, c]) <> ")"
+  show tg =
+    "TG(" <> intercalate "_" (tg^..allFAs.to show) <> ")"
 
 instance ToMolecularFormula Triacylglycerol where
-  toMolecularFormula (Triacylglycerol a b c) =
-    mkMolecularFormula [(C, 3), (H, 6)] |+| foldMap toMolecularFormula [a, b, c]
+  toMolecularFormula tg =
+    mkMolecularFormula [(C, 3), (H, 6)] |+|
+    foldMap toMolecularFormula (tg^..allFAs)
 
 instance ToElementalComposition Triacylglycerol where
   toElementalComposition = toElementalComposition . toMolecularFormula
+
+
+tagFAs :: Triacylglycerol -> [FattyAcyl]
+tagFAs tg = nub $ tg^..allFAs
 
 -- Brute force function to find possible TAGs. Write a more efficient
 -- implementation if there are performance issues.
@@ -61,12 +64,9 @@ findPossibleTAGs fas =
                (fas ^. monoisotopicMass)
                (collectFAs fas)
 
-tagFAs :: Triacylglycerol -> [FattyAcyl]
-tagFAs (Triacylglycerol fa1 fa2 fa3) = nub [fa1, fa2, fa3]
-
 data AssignedTAGs = AssignedTAGs {
     _tagSpectrumRow :: Maybe SpectrumRow
-  , _tags :: [Triacylglycerol]
+  , _tags           :: [Triacylglycerol]
   , _tagAssignedFAs :: AssignedFAs
 } deriving (Show, Eq, Ord)
 
@@ -84,16 +84,16 @@ assignTAGs spec fas =
                (findPossibleTAGs fas)
                fas
 
-allTentativelyAssignedFAs :: [AssignedTAGs] -> [FattyAcyl]
-allTentativelyAssignedFAs tgs =
-  sort . nub . catMaybes $
-    tgs^..traverse.tagAssignedFAs.getAssignedFAs.traverse.getAssignedFA
+-- allTentativelyAssignedFAs :: [AssignedTAGs] -> [FattyAcyl]
+-- allTentativelyAssignedFAs tgs =
+--   sort . nub $
+--     tgs^..traverse.tagAssignedFAs.getAssignedFAs.traverse.getAssignedFA._Just
 
 allAssignedTAGs :: [AssignedTAGs] -> [Triacylglycerol]
-allAssignedTAGs tgs = sort . nub . concat $ _tags <$> tgs
+allAssignedTAGs tgs = sort . nub . concat $ tgs^..traverse.tags
 
 allTagFAs :: [AssignedTAGs] -> [FattyAcyl]
-allTagFAs tgs = sort . nub . concat $ tagFAs <$> allAssignedTAGs tgs
+allTagFAs tgs = sort . nub $ allAssignedTAGs tgs >>= tagFAs
 
 totalTagIntensity :: [AssignedTAGs] -> Intensity
 totalTagIntensity = foldMap intensity'
@@ -110,7 +110,9 @@ normalisedAbundanceFAsIndentified tags =
       filter (isJust . _getAssignedFA) (tags ^. getAssignedFAs)
 
 formatNormalisedAbundanceFAsIndentified tags =
-  tags^.monoisotopicMass.to showVal <> ", " <> (showVal . normalisedAbundanceFAsIndentified $ tags)
+  tags^.monoisotopicMass.to showVal <>
+  ", " <>
+  (showVal . normalisedAbundanceFAsIndentified $ tags)
 
 correctionRatio :: Intensity -> AssignedTAGs -> Double
 correctionRatio (Intensity i) (AssignedTAGs r _ _) =
@@ -129,10 +131,10 @@ collectAssignedTagsFas tgs = [ (fa, na) | (Just fa, na) <- fattyAcylNormAbun]
            (assignedFAList^..traverse.assignedFAIonInfo.ionInfoNormalisedAbundance)
 
 data FinalResult = FinalResult {
-    _finalResultMz :: Mz
+    _finalResultMz                  :: Mz
   , _finalResultMzrelativeAbundance :: Double
-  , _finalResultFAs :: [(FattyAcyl, NormalisedAbundance)]
-  , _finalResultTags :: [Triacylglycerol]
+  , _finalResultFAs                 :: [(FattyAcyl, NormalisedAbundance)]
+  , _finalResultTags                :: [Triacylglycerol]
 } deriving (Show, Eq, Ord)
 
 makeLenses ''FinalResult
@@ -163,14 +165,17 @@ aggregateBy x = groupBy (\a b -> x a b == EQ) . sortBy x
 aggregateAL :: (Ord a) => [(a,b)] -> [(a,[b])]
 aggregateAL = fmap (fst . head &&& fmap snd) . aggregateBy (comparing fst)
 
-reCalNormalisedAbundance :: Double -> [(FattyAcyl, NormalisedAbundance)] -> [(FattyAcyl, NormalisedAbundance)]
+reCalNormalisedAbundance ::
+  Double -> [(FattyAcyl, NormalisedAbundance)] -> [(FattyAcyl, NormalisedAbundance)]
 reCalNormalisedAbundance n = mapped._2.getNormalisedAbundance %~ (*n)
 
 accumulateNormalisedAbundance :: [FinalResult] -> [(FattyAcyl, NormalisedAbundance)]
 accumulateNormalisedAbundance frs = mapped._2 %~ sum $ aggResult
   where
     aggResult = aggregateAL . concat $
-      zipWith reCalNormalisedAbundance (frs^..traverse.finalResultMzrelativeAbundance) (frs^..traverse.finalResultFAs)
+      zipWith reCalNormalisedAbundance
+              (frs^..traverse.finalResultMzrelativeAbundance)
+              (frs^..traverse.finalResultFAs)
 
 renderFattyAcylNormalisedAbundance :: (FattyAcyl, NormalisedAbundance) -> String
 renderFattyAcylNormalisedAbundance (fa, na) = show fa <> ", " <> showVal na

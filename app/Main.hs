@@ -42,8 +42,8 @@ main = do
   let finalResult' = finalResults finalResult
   putStrLn "Fatty acids in the search list"
   print $ sort fattyAcyls
-  putStrLn "Total tentatively assigned fatty acids"
-  print $ allTentativelyAssignedFAs finalResult
+  --putStrLn "Total tentatively assigned fatty acids"
+  --print $ allTentativelyAssignedFAs finalResult
   mapM_ putStrLn $ tagMzNormalisedAbundances finalResult'
   --print $ sumShouldEqual1 finalResult'
   mapM_ (putStrLn . renderFattyAcylNormalisedAbundance) $ accumulateNormalisedAbundance finalResult'
