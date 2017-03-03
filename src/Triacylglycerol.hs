@@ -107,7 +107,7 @@ normalisedAbundanceFAsIndentified tags =
   sum normalisedAbundList
   where
     normalisedAbundList =
-      _ionInfoNormalisedAbundance . _assignedFAIonInfo <$>
+      _afNormalisedAbundance <$>
       filter (isJust . _getAssignedFA) (tags ^. getAssignedFAs)
 
 formatNormalisedAbundanceFAsIndentified tags =
@@ -129,7 +129,7 @@ collectAssignedTagsFas tgs = [ (fa, na) | (Just fa, na) <- fattyAcylNormAbun]
     assignedFAList = tgs^.tagAssignedFAs.getAssignedFAs
     fattyAcylNormAbun =
        zip (assignedFAList^..traverse.getAssignedFA)
-           (assignedFAList^..traverse.assignedFAIonInfo.ionInfoNormalisedAbundance)
+           (assignedFAList^..traverse.normalisedAbundance)
 
 data FinalResult = FinalResult {
     _finalResultMz                  :: Mz

@@ -89,14 +89,22 @@ fattyAcidMonoisotopicMasses :: [MonoisotopicMass]
 fattyAcidMonoisotopicMasses = faMonoisotopicMass <$> fattyAcyls
 
 data AssignedFA = AssignedFA {
-    _getAssignedFA :: Maybe FattyAcyl
-  , _assignedFAIonInfo :: IonInfo
+    _getAssignedFA         :: Maybe FattyAcyl
+  , _afIntensity           :: Intensity
+  , _afRelativeAbundance   :: RelativeAbundance
+  , _afNormalisedAbundance :: NormalisedAbundance
 } deriving (Show, Eq, Ord) -- Maybe write my own Show instance.
 
 makeClassy ''AssignedFA
 
-instance HasIonInfo AssignedFA where
-  ionInfo = assignedFAIonInfo
+instance HasIntensity AssignedFA where
+  intensity = afIntensity
+
+instance HasRelativeAbundance AssignedFA where
+  relativeAbundance = afRelativeAbundance
+
+instance HasNormalisedAbundance AssignedFA where
+  normalisedAbundance = afNormalisedAbundance
 
 data AssignedFAs = AssignedFAs {
     _assignedFAsPrecIon :: Mz
@@ -122,8 +130,8 @@ assignFA n m fas =
               else assignFA n m fs
 
 neutralLossRowToFA :: NeutralLossRow -> AssignedFA
-neutralLossRowToFA (NeutralLossRow nl i) =
-  AssignedFA (assignFA 0.3 nl fattyAcyls) i
+neutralLossRowToFA (NeutralLossRow nl i r n) =
+  AssignedFA (assignFA 0.3 nl fattyAcyls) i r n
 
 toAssignedFAs :: NeutralLossSpectrum -> AssignedFAs
 toAssignedFAs (NeutralLossSpectrum p nls) =
