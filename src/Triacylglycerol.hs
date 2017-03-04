@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RecordWildCards #-}
 module Triacylglycerol where
 
 import FattyAcid
@@ -39,7 +40,7 @@ instance Show Triacylglycerol where
 
 instance ToMolecularFormula Triacylglycerol where
   toMolecularFormula tg =
-    mkMolecularFormula [(C, 3), (H, 6)] |+|
+    mkMolecularFormula [(C, 3), (H, 6)] <>
     foldMap toMolecularFormula (tg^..allFAs)
 
 instance ToElementalComposition Triacylglycerol where
@@ -53,11 +54,11 @@ tagFAs tg = nub $ tg^..allFAs
 -- implementation if there are performance issues.
 possibleTAGs :: Double -> MonoisotopicMass -> [FattyAcyl] -> [Triacylglycerol]
 possibleTAGs n prec fas = nub $ do
-  fa1 <- fas
-  fa2 <- fas
-  fa3 <- fas
-  guard (withinTolerance n prec (I.monoisotopicMass (Triacylglycerol fa1 fa2 fa3)))
-  return $ Triacylglycerol fa1 fa2 fa3
+  _fa1 <- fas
+  _fa2 <- fas
+  _fa3 <- fas
+  guard . withinTolerance n prec $ I.monoisotopicMass Triacylglycerol {..}
+  return Triacylglycerol {..}
 
 findPossibleTAGs :: AssignedFAs -> [Triacylglycerol]
 findPossibleTAGs fas =
@@ -107,7 +108,7 @@ normalisedAbundanceFAsIndentified tags =
   sum normalisedAbundList
   where
     normalisedAbundList =
-      _ionInfoNormalisedAbundance . _assignedFAIonInfo <$>
+      _afNormalisedAbundance <$>
       filter (isJust . _getAssignedFA) (tags ^. getAssignedFAs)
 
 formatNormalisedAbundanceFAsIndentified tags =
@@ -129,7 +130,7 @@ collectAssignedTagsFas tgs = [ (fa, na) | (Just fa, na) <- fattyAcylNormAbun]
     assignedFAList = tgs^.tagAssignedFAs.getAssignedFAs
     fattyAcylNormAbun =
        zip (assignedFAList^..traverse.getAssignedFA)
-           (assignedFAList^..traverse.assignedFAIonInfo.ionInfoNormalisedAbundance)
+           (assignedFAList^..traverse.normalisedAbundance)
 
 data FinalResult = FinalResult {
     _finalResultMz                  :: Mz

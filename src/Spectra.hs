@@ -60,29 +60,11 @@ instance Monoid NormalisedAbundance where
 instance ShowVal NormalisedAbundance where
   showVal (NormalisedAbundance v) = show v
 
-data IonInfo = IonInfo {
-    _ionInfoIntensity :: Intensity
-  , _ionInfoRelativeAbundance :: RelativeAbundance
-  , _ionInfoNormalisedAbundance :: NormalisedAbundance
-} deriving (Eq, Ord)
-
-makeClassy ''IonInfo
-
-instance HasIntensity IonInfo where
-  intensity = ionInfoIntensity
-
-instance HasRelativeAbundance IonInfo where
-  relativeAbundance = ionInfoRelativeAbundance
-
-instance HasNormalisedAbundance IonInfo where
-  normalisedAbundance = ionInfoNormalisedAbundance
-
-instance Show IonInfo where
-  show (IonInfo i r n) = intercalate ", " [show i, show r, show n]
-
 data SpectrumRow = SpectrumRow {
-    _mz :: Mz
-  , _spectrumRowIonInfo :: IonInfo
+    _mz                    :: Mz
+  , _srIntensity           :: Intensity
+  , _srRelativeAbundance   :: RelativeAbundance
+  , _srNormalisedAbundance :: NormalisedAbundance
 } deriving (Eq, Ord)
 
 makeClassy ''SpectrumRow
@@ -90,20 +72,17 @@ makeClassy ''SpectrumRow
 instance HasMonoisotopicMass SpectrumRow where
   monoisotopicMass = mz
 
-instance HasIonInfo SpectrumRow where
-  ionInfo = spectrumRowIonInfo
+instance HasIntensity SpectrumRow where
+  intensity = srIntensity
 
 instance HasNormalisedAbundance SpectrumRow where
-  normalisedAbundance = ionInfo.normalisedAbundance
+  normalisedAbundance = srNormalisedAbundance
 
 instance HasRelativeAbundance SpectrumRow where
-  relativeAbundance = ionInfo.relativeAbundance
-
-instance HasIntensity SpectrumRow where
-  intensity = ionInfo.intensity
+  relativeAbundance = srRelativeAbundance
 
 instance Show SpectrumRow where
-  show (SpectrumRow m i) = intercalate ", " [show m, show i]
+  show (SpectrumRow m i r n) = intercalate ", " [show m, show i, show m, show n]
 
 newtype MSSpectrum = MSSpectrum
   { _msSpectrum :: [SpectrumRow] }
@@ -130,7 +109,7 @@ relativeAbundances spec =
 
 insertAbundances :: [(Mz, Intensity)] -> [SpectrumRow]
 insertAbundances spec =
-  zipWith3 (\(a, b) c d -> SpectrumRow a (IonInfo b c d))
+  zipWith3 (\(a, b) c d -> SpectrumRow a b c d)
     spec
     (relativeAbundances spec)
     (normalizedAbundances spec)
@@ -154,9 +133,9 @@ class Spectrum a where
   filterByNormalisedAbundance a = smap (filterNormalisedAbundance a)
   selectRange min' max' spec =
     recalculateAbundances $
-      smap (filter (\(SpectrumRow m _) -> m < max' && m > min')) spec
+      smap (filter (\(SpectrumRow m _ _ _) -> m < max' && m > min')) spec
   recalculateAbundances =
-    smap (insertAbundances . fmap (\(SpectrumRow m i) -> (m, i ^. intensity)))
+    smap (insertAbundances . fmap (\(SpectrumRow m i _ _) -> (m, i ^. intensity)))
 
 instance Spectrum MSSpectrum where
   smap = over msSpectrum
@@ -193,24 +172,26 @@ calNeutralLosses (MS2Spectrum p s) =
   fmap (\r -> p |-| r ^. mz) s
 
 data NeutralLossRow = NeutralLossRow {
-    _neutralLoss :: MonoisotopicMass
-  , _neutralLossIonInfo :: IonInfo
+    _neutralLoss           :: MonoisotopicMass
+  , _nlIntensity           :: Intensity
+  , _nlRelativeAbundance   :: RelativeAbundance
+  , _nlNormalisedAbundance :: NormalisedAbundance
 } deriving (Eq, Ord)
 
 makeClassy ''NeutralLossRow
 
 instance Show NeutralLossRow where
-  show (NeutralLossRow n i) = intercalate ", " [show n, show i]
+  show (NeutralLossRow m i r n) = intercalate ", " [show n, show i, show r, show n]
 
 data NeutralLossSpectrum = NeutralLossSpectrum {
-    _nLPrecursorMz :: Mz
+    _nlPrecursorMz :: Mz
   , _getNeutralLossSpectrum :: [NeutralLossRow]
   } deriving (Eq, Ord)
 
 makeLenses ''NeutralLossSpectrum
 
 instance HasMonoisotopicMass NeutralLossSpectrum where
-  monoisotopicMass = nLPrecursorMz
+  monoisotopicMass = nlPrecursorMz
 
 instance Show NeutralLossSpectrum where
   show (NeutralLossSpectrum n s) =
@@ -220,8 +201,8 @@ instance Show NeutralLossSpectrum where
 
 toNeutralLossSpectrum :: MS2Spectrum -> NeutralLossSpectrum
 toNeutralLossSpectrum (MS2Spectrum prec spec) = NeutralLossSpectrum prec
- ((\(SpectrumRow m i) ->
-   NeutralLossRow (prec |-| m) i) <$> spec)
+ ((\(SpectrumRow m i r n) ->
+   NeutralLossRow (prec |-| m) i r n) <$> spec)
 
 -- Reads spectrum from CSV file
 readSpectrum :: [[String]] -> [(Mz, Intensity)]
