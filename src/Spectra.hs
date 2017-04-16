@@ -1,21 +1,56 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Spectra where
 
+import qualified Isotope as I
 import Isotope hiding (monoisotopicMass)
 import Data.List
 import Data.Ord
 import Data.Monoid
+import Data.Bifunctor
+import Data.Csv
+import Data.Text (Text)
+import Data.Vector (Vector, toList)
 import Numeric
 import Control.Lens
+
+import qualified Data.ByteString.Lazy
+import qualified Data.Csv
 
 makeClassy ''MonoisotopicMass
 
 class ShowVal a where
   showVal :: a -> String
 
-type Mz = MonoisotopicMass
+newtype Charge = Charge { getCharge :: Int }
+  deriving (Show, Eq, Ord, Num)
+
+newtype Mz = Mz { _getMz :: Double }
+  deriving (Show, Eq, Ord, Num, Fractional)
+
+makeLenses ''Mz
+
+class ToElementalComposition a => Ion a where
+  charge                  :: a -> Charge
+  mz                      :: a -> Mz
+  mz a = Mz $ monoisotopicMass' / charge'
+    where
+      monoisotopicMass' =
+        getMonoisotopicMass . I.monoisotopicMass . toElementalComposition $ a
+      charge' = fromIntegral . getCharge . charge $ a
+  {-# MINIMAL charge #-}
+
+deriving instance Num MonoisotopicMass
+
+deriving instance Fractional MonoisotopicMass
 
 instance ShowVal MonoisotopicMass where
   showVal (MonoisotopicMass v) = show v
@@ -60,171 +95,232 @@ instance Monoid NormalisedAbundance where
 instance ShowVal NormalisedAbundance where
   showVal (NormalisedAbundance v) = show v
 
-data SpectrumRow = SpectrumRow {
-    _mz                    :: Mz
+data SpectrumRow a = SpectrumRow {
+    _ion                   :: a
   , _srIntensity           :: Intensity
   , _srRelativeAbundance   :: RelativeAbundance
   , _srNormalisedAbundance :: NormalisedAbundance
-} deriving (Eq, Ord)
+} deriving (Eq, Ord, Functor, Foldable)
 
 makeClassy ''SpectrumRow
 
-instance HasMonoisotopicMass SpectrumRow where
-  monoisotopicMass = mz
+-- instance HasMonoisotopicMass (SpectrumRow a) where
+--   monoisotopicMass = mz
 
-instance HasIntensity SpectrumRow where
+instance HasIntensity (SpectrumRow a) where
   intensity = srIntensity
 
-instance HasNormalisedAbundance SpectrumRow where
+instance HasNormalisedAbundance (SpectrumRow a) where
   normalisedAbundance = srNormalisedAbundance
 
-instance HasRelativeAbundance SpectrumRow where
+instance HasRelativeAbundance (SpectrumRow a) where
   relativeAbundance = srRelativeAbundance
 
-instance Show SpectrumRow where
-  show (SpectrumRow m i r n) = intercalate ", " [show m, show i, show m, show n]
+instance Show a => Show (SpectrumRow a) where
+  show (SpectrumRow m i r n) =
+    intercalate ", " [show m, show i, show m, show n]
 
-newtype MSSpectrum = MSSpectrum
-  { _msSpectrum :: [SpectrumRow] }
-  deriving (Eq, Ord)
+newtype MSSpectrum a = MSSpectrum
+  { _msSpectrum :: [SpectrumRow a] }
+  deriving (Eq, Ord, Functor, Foldable)
 
 makeLenses ''MSSpectrum
 
-sumIntensities' :: [(Mz, Intensity)] -> Intensity
-sumIntensities' = foldr (\(_, i) acc -> acc + i) 0
+-- sumIntensities :: [(Mz, Intensity)] -> Intensity
+-- sumIntensities = foldOf (folded._2) -- foldr (\(_, i) acc -> acc + i) 0
 
-normalizedAbundances :: [(Mz, Intensity)] -> [NormalisedAbundance]
-normalizedAbundances spec =
-  (\(_, i) ->
-      NormalisedAbundance
-        (i^.getIntensity * 100 /  sumIntensities' spec ^.getIntensity))
-        <$> spec
+data SpectrumCsv = SpectrumCsv {
+    _csvMz        :: Mz
+  , _csvIntensity :: Intensity
+}
 
-relativeAbundances :: [(Mz, Intensity)] -> [RelativeAbundance]
-relativeAbundances spec =
-  (\(_, i) ->
-    RelativeAbundance
-      (i^.getIntensity * 100 / maximumBy (comparing snd) spec^._2.getIntensity))
-      <$> spec
+makeLenses ''SpectrumCsv
 
-insertAbundances :: [(Mz, Intensity)] -> [SpectrumRow]
+instance FromNamedRecord SpectrumCsv where
+  parseNamedRecord m =
+    (\mz i -> SpectrumCsv (Mz mz) (Intensity i))
+      <$> m .: "m/z"
+      <*> m .: "Intensity"
+
+-- Adapted from https://github.com/Gabriel439/slides/blob/master/lambdaconf/data/exercises/02/Main.hs
+process :: FilePath -> IO [SpectrumCsv]
+process file = do
+    bytes <- Data.ByteString.Lazy.readFile file
+    case decodeByName bytes of
+        Left   err        -> fail err
+        Right (_, vector) -> return $ toList vector
+
+
+insertAbundances :: [SpectrumCsv] -> [SpectrumRow Mz]
 insertAbundances spec =
-  zipWith3 (\(a, b) c d -> SpectrumRow a b c d)
-    spec
-    (relativeAbundances spec)
-    (normalizedAbundances spec)
+  fmap (\csv ->
+    SpectrumRow
+      (csv^.csvMz)
+      (csv^.csvIntensity)
+      (RelativeAbundance (csv^.csvIntensity.getIntensity * 100 / maxIntensity))
+      (NormalisedAbundance ((csv^.csvIntensity.getIntensity) * 100 / totalIntensity)))
+  spec
+  where
+    totalIntensity = foldOf (folded.csvIntensity) spec ^.getIntensity
+    maxIntensity =
+      maximumBy (comparing _csvIntensity) spec ^.csvIntensity.getIntensity
 
-filterNormalisedAbundance :: NormalisedAbundance -> [SpectrumRow] -> [SpectrumRow]
-filterNormalisedAbundance abun = filter (\r -> r ^. normalisedAbundance > abun)
+mkMSSpectrum :: [SpectrumCsv] -> MSSpectrum Mz
+mkMSSpectrum = MSSpectrum . insertAbundances
 
-filterRelativeAbundance :: RelativeAbundance -> [SpectrumRow] -> [SpectrumRow]
-filterRelativeAbundance abun = filter (\r -> r ^. relativeAbundance > abun)
 
-showList' :: (Show a) => [a] -> String
+-- relativeAbundances :: [(Mz, Intensity)] -> [RelativeAbundance]
+-- relativeAbundances spec =
+--   (\(_, i) ->
+--     <$> spec
+--   where
+--
+--
+-- insertAbundances spec =
+--   zipWith3 (\(a, b) c d -> SpectrumRow a b c d)
+--     spec
+--     (relativeAbundances spec)
+--     (normalizedAbundances spec)
+
+
+showList' :: (Show a) => [a] -> String -- maybe delete this function
 showList' l = intercalate "\n" $ show <$> l
 
-class Spectrum a where
-  smap :: ([SpectrumRow] -> [SpectrumRow]) -> a -> a
-  filterByRelativeAbundance :: RelativeAbundance -> a -> a
-  filterByNormalisedAbundance :: NormalisedAbundance -> a -> a
-  selectRange :: Mz -> Mz -> a -> a
-  recalculateAbundances :: a -> a
-  filterByRelativeAbundance a = smap (filterRelativeAbundance a)
-  filterByNormalisedAbundance a = smap (filterNormalisedAbundance a)
-  selectRange min' max' spec =
-    recalculateAbundances $
-      smap (filter (\(SpectrumRow m _ _ _) -> m < max' && m > min')) spec
-  recalculateAbundances =
-    smap (insertAbundances . fmap (\(SpectrumRow m i _ _) -> (m, i ^. intensity)))
+-- class Spectrum a where
+--   smap :: ([SpectrumRow] -> [SpectrumRow]) -> a -> a
+--   filterByRelativeAbundance :: RelativeAbundance -> a -> a
+--   filterByNormalisedAbundance :: NormalisedAbundance -> a -> a
+--   recalculateAbundances :: a -> a
+--   filterByRelativeAbundance a = smap (filterRelativeAbundance a)
+--   filterByNormalisedAbundance a = smap (filterNormalisedAbundance a)
+--   recalculateAbundances =
+--     smap (insertAbundances . fmap (\(SpectrumRow m i _ _) -> (m, i ^. intensity)))
 
-instance Spectrum MSSpectrum where
-  smap = over msSpectrum
+-- instance Spectrum MSSpectrum where
+--   smap = over msSpectrum
 
-instance Show MSSpectrum where
+instance Show a => Show (MSSpectrum a) where
   show (MSSpectrum s) = "MS spectrum \n" <> showList' s
 
-data MS2Spectrum = MS2Spectrum {
-    _precursorMz :: Mz
-  , _ms2Spectrum :: [SpectrumRow]
-} deriving (Eq, Ord)
+data MS2Spectrum a b = MS2Spectrum {
+    _precursorIon :: a
+  , _ms2Spectrum :: [SpectrumRow b]
+} deriving (Show, Eq, Ord, Functor, Foldable)
 
 makeLenses ''MS2Spectrum
 
-instance HasMonoisotopicMass MS2Spectrum where
-  monoisotopicMass = precursorMz
+lookupIon :: (Num b, Ord b) => b -> b -> MS2Spectrum a b -> Maybe (SpectrumRow b)
+lookupIon n i (MS2Spectrum _ rs) = loop n i rs
+  where
+    loop n i rs =
+      case rs of
+        [] -> Nothing
+        r:rs' -> if withinTolerance n i (r^.ion)
+                   then Just r
+                   else loop n i rs'
 
-instance Show MS2Spectrum where
-  show (MS2Spectrum p s) =
-     "MS2 spectrum \n" <>
-     "precursor ion: " <> show p <> "\n" <>
-     showList' s
+removePrecursorIon :: Mz -> [SpectrumCsv] -> [SpectrumCsv]
+removePrecursorIon prec =
+  filter (^.csvMz.to (< prec - 2))
 
-instance Spectrum MS2Spectrum where
-  smap = over ms2Spectrum
+mkMS2SpectrumRemovePrecursor :: Mz -> [SpectrumCsv] -> MS2Spectrum Mz Mz
+mkMS2SpectrumRemovePrecursor mz rs =
+  MS2Spectrum mz . insertAbundances $ removePrecursorIon mz rs
 
-removePrecursorIon :: MS2Spectrum -> MS2Spectrum
-removePrecursorIon spec =
-  selectRange (MonoisotopicMass 0)
-              (spec ^. monoisotopicMass |-| MonoisotopicMass 2) spec
+filterByRelativeAbundance ::
+  (RelativeAbundance -> Bool) -> MS2Spectrum a b -> MS2Spectrum a b
+filterByRelativeAbundance p =
+  ms2Spectrum %~ filter (^.relativeAbundance.to p)
 
-calNeutralLosses :: MS2Spectrum -> [MonoisotopicMass]
-calNeutralLosses (MS2Spectrum p s) =
-  fmap (\r -> p |-| r ^. mz) s
+filterByNormalisedAbundance ::
+  (NormalisedAbundance -> Bool) -> MS2Spectrum a b -> MS2Spectrum a b
+filterByNormalisedAbundance p =
+  ms2Spectrum %~ filter (^.normalisedAbundance.to p)
 
-data NeutralLossRow = NeutralLossRow {
-    _neutralLoss           :: MonoisotopicMass
-  , _nlIntensity           :: Intensity
-  , _nlRelativeAbundance   :: RelativeAbundance
-  , _nlNormalisedAbundance :: NormalisedAbundance
-} deriving (Eq, Ord)
 
-makeClassy ''NeutralLossRow
 
-instance Show NeutralLossRow where
-  show (NeutralLossRow m i r n) = intercalate ", " [show n, show i, show r, show n]
+-- instance HasMonoisotopicMass (MS2Spectrum a b) where
+--   monoisotopicMass = ion
 
-data NeutralLossSpectrum = NeutralLossSpectrum {
-    _nlPrecursorMz :: Mz
-  , _getNeutralLossSpectrum :: [NeutralLossRow]
-  } deriving (Eq, Ord)
+--instance Show (MS2Spectrum a) where
+--  show (MS2Spectrum p s) =
+--     "MS2 spectrum \n" <>
+--     "precursor ion: " <> show p <> "\n" <>
+--     showList' s
 
-makeLenses ''NeutralLossSpectrum
+-- instance Spectrum MS2Spectrum where
+--   smap = over ms2Spectrum
 
-instance HasMonoisotopicMass NeutralLossSpectrum where
-  monoisotopicMass = nlPrecursorMz
+--removePrecursorIon :: MS2Spectrum Mz Mz -> MS2Spectrum Mz Mz
+--removePrecursorIon spec =
+--  ms2Spectrum %~ filter
+--    (^.ion.to (< spec^.precursorIon |-| MonoisotopicMass 2)) $ spec
+--  --(MonoisotopicMass 0)
+  --            (spec ^. monoisotopicMass |-| MonoisotopicMass 2) spec
 
-instance Show NeutralLossSpectrum where
-  show (NeutralLossSpectrum n s) =
-     "Neutral loss spectrum \n" <>
-     "precursor ion: " <> show n <> "\n" <>
-     showList' s
 
-toNeutralLossSpectrum :: MS2Spectrum -> NeutralLossSpectrum
-toNeutralLossSpectrum (MS2Spectrum prec spec) = NeutralLossSpectrum prec
- ((\(SpectrumRow m i r n) ->
-   NeutralLossRow (prec |-| m) i r n) <$> spec)
+--calNeutralLosses :: MS2Spectrum Mz Mz -> [MonoisotopicMass]
+--calNeutralLosses (MS2Spectrum p s) =
+--  fmap (\r -> p |-| r ^. ion) s
+--
+-- data NeutralLossRow = NeutralLossRow {
+--     _neutralLoss           :: MonoisotopicMass
+--   , _nlIntensity           :: Intensity
+--   , _nlRelativeAbundance   :: RelativeAbundance
+--   , _nlNormalisedAbundance :: NormalisedAbundance
+-- } deriving (Eq, Ord)
+--
+-- makeClassy ''NeutralLossRow
+--
+-- instance Show NeutralLossRow where
+--   show (NeutralLossRow m i r n) =
+--     intercalate ", " [show n, show i, show r, show n]
+--
+-- data NeutralLossSpectrum = NeutralLossSpectrum {
+--     _nlPrecursorMz :: Mz
+--   , _getNeutralLossSpectrum :: [NeutralLossRow]
+--   } deriving (Eq, Ord)
+--
+-- makeLenses ''NeutralLossSpectrum
+--
+-- instance HasMonoisotopicMass NeutralLossSpectrum where
+--   monoisotopicMass = nlPrecursorMz
+--
+-- instance Show NeutralLossSpectrum where
+--   show (NeutralLossSpectrum n s) =
+--      "Neutral loss spectrum \n" <>
+--      "precursor ion: " <> show n <> "\n" <>
+--      showList' s
+--
+-- toNeutralLossSpectrum :: MS2Spectrum Mz Mz -> NeutralLossSpectrum
+-- toNeutralLossSpectrum (MS2Spectrum prec spec) = NeutralLossSpectrum prec
+--  ((\(SpectrumRow m i r n) ->
+--    NeutralLossRow (prec |-| m) i r n) <$> spec)
+
+calNeutralLoss :: Mz -> Mz -> MonoisotopicMass
+calNeutralLoss prec frag = (prec - frag)^.getMz.to MonoisotopicMass
+
+calNeutralLosses :: MS2Spectrum Mz Mz -> MS2Spectrum Mz MonoisotopicMass
+calNeutralLosses spec = calNeutralLoss (spec^.precursorIon) <$> spec
 
 -- Reads spectrum from CSV file
-readSpectrum :: [[String]] -> [(Mz, Intensity)]
-readSpectrum spec = ionAndAbundance <$> spec
-  where
-    ionAndAbundance :: [String] -> (Mz, Intensity)
-    ionAndAbundance line = case line of
-      ion : abund : _ -> (MonoisotopicMass
-       (read ion), Intensity (read abund))
-      _ -> error "not a valid mass spectrum"
+-- readSpectrum :: [[String]] -> [(Mz, Intensity)]
+-- readSpectrum spec = ionAndAbundance <$> spec
+--   where
+--     ionAndAbundance :: [String] -> (Mz, Intensity)
+--     ionAndAbundance line = case line of
+--       ion : abund : _ -> (MonoisotopicMass
+--         (read ion), Intensity (read abund))
+--       _ -> error "not a valid mass spectrum"
 
-withinTolerance :: Double -> MonoisotopicMass -> MonoisotopicMass -> Bool
-withinTolerance n v1 v2 = n > abs (getMonoisotopicMass (v1 |-| v2))
+withinTolerance :: (Num a, Ord a) => a -> a -> a -> Bool
+withinTolerance n v1 v2 = n > abs (v1 - v2)
 
-findPrecursorIon :: Double -> Mz -> MSSpectrum -> Maybe SpectrumRow
+findPrecursorIon :: Mz -> Mz -> MSSpectrum Mz -> Maybe (SpectrumRow Mz)
 findPrecursorIon n m (MSSpectrum spec) =
-  if null filteredSpectrumRows
-    then Nothing
-    else Just $
-      maximumBy (comparing (^. intensity)) filteredSpectrumRows
+  maximumByOf traverse (comparing (^.intensity)) filteredSpectrumRows
   where
-    filteredSpectrumRows :: [SpectrumRow]
+    filteredSpectrumRows :: [SpectrumRow Mz]
     filteredSpectrumRows = filter
-                             (\x -> withinTolerance n m (x ^. mz))
+                             (\x -> withinTolerance n m (x ^. ion))
                              spec

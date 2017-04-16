@@ -21,6 +21,10 @@ library
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , lens
+                     , cassava
+                     , text
+                     , vector
+                     , bytestring
                      , isotope
                      , split
                      , hinduce-missingh
@@ -34,6 +38,7 @@ executable lipase-exe
                      , directory
                      , lipase
                      , isotope
+                     , cassava
                      , split
   default-language:    Haskell2010
 
@@ -43,9 +48,11 @@ test-suite lipase-test
   main-is:             Spec.hs
   build-depends:       base
                      , lipase
+                     , isotope
+                     , lens
                      , hspec
                      , QuickCheck
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N -fdefer-type-errors
   default-language:    Haskell2010
 
 source-repository head
