@@ -105,44 +105,8 @@ oddChainFAs = c15s <> c17s <> c19s <> c21s
 fattyAcids :: [FattyAcid]
 fattyAcids = evenChainFAs <> oddChainFAs
 
--- faMonoisotopicMass :: FattyAcyl -> MonoisotopicMass
--- faMonoisotopicMass fa = I.monoisotopicMass fa |+| I.monoisotopicMass H
-
 fattyAcidMonoisotopicMasses :: [MonoisotopicMass]
 fattyAcidMonoisotopicMasses = I.monoisotopicMass <$> fattyAcids
-
--- data AssignedFA = AssignedFA {
---     _getAssignedFA         :: Maybe FattyAcyl
---   , _afIntensity           :: Intensity
---   , _afRelativeAbundance   :: RelativeAbundance
---   , _afNormalisedAbundance :: NormalisedAbundance
--- } deriving (Show, Eq, Ord) -- Maybe write my own Show instance.
---
--- makeClassy ''AssignedFA
---
--- instance HasIntensity AssignedFA where
---   intensity = afIntensity
---
--- instance HasRelativeAbundance AssignedFA where
---   relativeAbundance = afRelativeAbundance
---
--- instance HasNormalisedAbundance AssignedFA where
---   normalisedAbundance = afNormalisedAbundance
---
--- data AssignedFAs = AssignedFAs {
---     _assignedFAsPrecIon :: Mz
---   , _getAssignedFAs :: [AssignedFA]
--- } deriving (Eq, Ord)
---
--- makeClassy ''AssignedFAs
---
--- instance HasMonoisotopicMass AssignedFAs where
---   monoisotopicMass = assignedFAsPrecIon
---
--- instance Show AssignedFAs where
---   show (AssignedFAs p fas) =
---     "Precursor ion: " <> show p <> "\n" <>
---     showList' fas
 
 assignFAsFromNeutralLoss :: MS2Spectrum a MonoisotopicMass -> MS2Spectrum a (Maybe FattyAcid)
 assignFAsFromNeutralLoss =
@@ -155,11 +119,3 @@ assignFA n m fas =
     fa:fas -> if withinTolerance n m (I.monoisotopicMass fa)
               then Just fa
               else assignFA n m fas
-
--- toAssignedFAs :: NeutralLossSpectrum -> AssignedFAs
--- toAssignedFAs (NeutralLossSpectrum p nls) =
---   AssignedFAs p (neutralLossRowToFA <$> nls)
-
--- collectFAs :: AssignedFAs -> [FattyAcyl]
--- collectFAs fas =
---   catMaybes $ fas ^.. getAssignedFAs.traverse.getAssignedFA

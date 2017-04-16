@@ -67,8 +67,6 @@ instance Monoid Intensity where
 instance ShowVal Intensity where
   showVal (Intensity v) = show v
 
--- formatFloatN floatNum numOfDecimal = showFFloat (Just numOfDecimals) floatNum ""
-
 newtype RelativeAbundance = RelativeAbundance {
   _getRelativeAbundance :: Double
 } deriving (Show, Eq, Ord, Num, Fractional) -- write show instance, 2 d.p, add "%"
@@ -104,9 +102,6 @@ data SpectrumRow a = SpectrumRow {
 
 makeClassy ''SpectrumRow
 
--- instance HasMonoisotopicMass (SpectrumRow a) where
---   monoisotopicMass = mz
-
 instance HasIntensity (SpectrumRow a) where
   intensity = srIntensity
 
@@ -125,9 +120,6 @@ newtype MSSpectrum a = MSSpectrum
   deriving (Eq, Ord, Functor, Foldable)
 
 makeLenses ''MSSpectrum
-
--- sumIntensities :: [(Mz, Intensity)] -> Intensity
--- sumIntensities = foldOf (folded._2) -- foldr (\(_, i) acc -> acc + i) 0
 
 data SpectrumCsv = SpectrumCsv {
     _csvMz        :: Mz
@@ -150,7 +142,6 @@ process file = do
         Left   err        -> fail err
         Right (_, vector) -> return $ toList vector
 
-
 insertAbundances :: [SpectrumCsv] -> [SpectrumRow Mz]
 insertAbundances spec =
   fmap (\csv ->
@@ -168,36 +159,8 @@ insertAbundances spec =
 mkMSSpectrum :: [SpectrumCsv] -> MSSpectrum Mz
 mkMSSpectrum = MSSpectrum . insertAbundances
 
-
--- relativeAbundances :: [(Mz, Intensity)] -> [RelativeAbundance]
--- relativeAbundances spec =
---   (\(_, i) ->
---     <$> spec
---   where
---
---
--- insertAbundances spec =
---   zipWith3 (\(a, b) c d -> SpectrumRow a b c d)
---     spec
---     (relativeAbundances spec)
---     (normalizedAbundances spec)
-
-
 showList' :: (Show a) => [a] -> String -- maybe delete this function
 showList' l = intercalate "\n" $ show <$> l
-
--- class Spectrum a where
---   smap :: ([SpectrumRow] -> [SpectrumRow]) -> a -> a
---   filterByRelativeAbundance :: RelativeAbundance -> a -> a
---   filterByNormalisedAbundance :: NormalisedAbundance -> a -> a
---   recalculateAbundances :: a -> a
---   filterByRelativeAbundance a = smap (filterRelativeAbundance a)
---   filterByNormalisedAbundance a = smap (filterNormalisedAbundance a)
---   recalculateAbundances =
---     smap (insertAbundances . fmap (\(SpectrumRow m i _ _) -> (m, i ^. intensity)))
-
--- instance Spectrum MSSpectrum where
---   smap = over msSpectrum
 
 instance Show a => Show (MSSpectrum a) where
   show (MSSpectrum s) = "MS spectrum \n" <> showList' s
@@ -237,81 +200,11 @@ filterByNormalisedAbundance ::
 filterByNormalisedAbundance p =
   ms2Spectrum %~ filter (^.normalisedAbundance.to p)
 
-
-
--- instance HasMonoisotopicMass (MS2Spectrum a b) where
---   monoisotopicMass = ion
-
---instance Show (MS2Spectrum a) where
---  show (MS2Spectrum p s) =
---     "MS2 spectrum \n" <>
---     "precursor ion: " <> show p <> "\n" <>
---     showList' s
-
--- instance Spectrum MS2Spectrum where
---   smap = over ms2Spectrum
-
---removePrecursorIon :: MS2Spectrum Mz Mz -> MS2Spectrum Mz Mz
---removePrecursorIon spec =
---  ms2Spectrum %~ filter
---    (^.ion.to (< spec^.precursorIon |-| MonoisotopicMass 2)) $ spec
---  --(MonoisotopicMass 0)
-  --            (spec ^. monoisotopicMass |-| MonoisotopicMass 2) spec
-
-
---calNeutralLosses :: MS2Spectrum Mz Mz -> [MonoisotopicMass]
---calNeutralLosses (MS2Spectrum p s) =
---  fmap (\r -> p |-| r ^. ion) s
---
--- data NeutralLossRow = NeutralLossRow {
---     _neutralLoss           :: MonoisotopicMass
---   , _nlIntensity           :: Intensity
---   , _nlRelativeAbundance   :: RelativeAbundance
---   , _nlNormalisedAbundance :: NormalisedAbundance
--- } deriving (Eq, Ord)
---
--- makeClassy ''NeutralLossRow
---
--- instance Show NeutralLossRow where
---   show (NeutralLossRow m i r n) =
---     intercalate ", " [show n, show i, show r, show n]
---
--- data NeutralLossSpectrum = NeutralLossSpectrum {
---     _nlPrecursorMz :: Mz
---   , _getNeutralLossSpectrum :: [NeutralLossRow]
---   } deriving (Eq, Ord)
---
--- makeLenses ''NeutralLossSpectrum
---
--- instance HasMonoisotopicMass NeutralLossSpectrum where
---   monoisotopicMass = nlPrecursorMz
---
--- instance Show NeutralLossSpectrum where
---   show (NeutralLossSpectrum n s) =
---      "Neutral loss spectrum \n" <>
---      "precursor ion: " <> show n <> "\n" <>
---      showList' s
---
--- toNeutralLossSpectrum :: MS2Spectrum Mz Mz -> NeutralLossSpectrum
--- toNeutralLossSpectrum (MS2Spectrum prec spec) = NeutralLossSpectrum prec
---  ((\(SpectrumRow m i r n) ->
---    NeutralLossRow (prec |-| m) i r n) <$> spec)
-
 calNeutralLoss :: Mz -> Mz -> MonoisotopicMass
 calNeutralLoss prec frag = (prec - frag)^.getMz.to MonoisotopicMass
 
 calNeutralLosses :: MS2Spectrum Mz Mz -> MS2Spectrum Mz MonoisotopicMass
 calNeutralLosses spec = calNeutralLoss (spec^.precursorIon) <$> spec
-
--- Reads spectrum from CSV file
--- readSpectrum :: [[String]] -> [(Mz, Intensity)]
--- readSpectrum spec = ionAndAbundance <$> spec
---   where
---     ionAndAbundance :: [String] -> (Mz, Intensity)
---     ionAndAbundance line = case line of
---       ion : abund : _ -> (MonoisotopicMass
---         (read ion), Intensity (read abund))
---       _ -> error "not a valid mass spectrum"
 
 withinTolerance :: (Num a, Ord a) => a -> a -> a -> Bool
 withinTolerance n v1 v2 = n > abs (v1 - v2)

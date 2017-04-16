@@ -54,18 +54,3 @@ main = do
   putStrLn . unwords $ show <$> allTagFAs'
   putStrLn "Total condensed triacylglycerols with normalised abundances:"
   putStrLn . intercalate "\n" $ renderPairNormalisedAbundance <$> identifiedCondensedTags'
-  --    finalResult' = finalResults finalResult
-  -- putStrLn "Fatty acids in the search list"
-  -- print $ sort fattyAcyls
-  -- --putStrLn "Total tentatively assigned fatty acids"
-  -- --print $ allTentativelyAssignedFAs finalResult
-  -- mapM_ putStrLn $ tagMzNormalisedAbundances finalResult'
-  -- --print $ sumShouldEqual1 finalResult'
-  -- mapM_ (putStrLn . renderFattyAcylNormalisedAbundance) $ accumulateNormalisedAbundance finalResult'
-
-
-  --putStrLn "Total assigned triacylglycerols"
-  --print $ allAssignedTAGs finalResult
-  --putStrLn "Total triacylglycerol fatty acids"
-  --print $ allTagFAs finalResult
-  --putStrLn . showList' $ formatNormalisedAbundanceFAsIndentified <$> finalResult

@@ -107,75 +107,12 @@ tagToCondensedTriacylglycerol tg =
 tagsToCondensedTags :: [Triacylglycerol] -> [CondensedTriacylglycerol]
 tagsToCondensedTags tags = nub $ tagToCondensedTriacylglycerol <$> tags
 
---data AssignedTAGs a = AssignedTAGs {
---    _tagSpectrumRow :: Maybe (SpectrumRow a)
---  , _tags           :: [Triacylglycerol]
---  , _tagAssignedFAs :: AssignedFAs
---} deriving (Show, Eq, Ord)
---
---makeLenses ''AssignedTAGs
---
---instance HasAssignedFAs (AssignedTAGs a) where
---  assignedFAs = tagAssignedFAs
---
---instance HasMonoisotopicMass (AssignedTAGs a) where
---  monoisotopicMass = assignedFAs.monoisotopicMass
---
---assignTAGs :: MSSpectrum Mz -> AssignedFAs -> AssignedTAGs Mz
---assignTAGs spec fas =
---  AssignedTAGs (findPrecursorIon 0.3 (fas ^. monoisotopicMass) spec)
---               (findPossibleTAGs fas)
---               fas
---
----- allTentativelyAssignedFAs :: [AssignedTAGs] -> [FattyAcyl]
----- allTentativelyAssignedFAs tgs =
-----   sort . nub $
-----     tgs^..traverse.tagAssignedFAs.getAssignedFAs.traverse.getAssignedFA._Just
---
-
---
---allTagFAs :: [AssignedTAGs a] -> [FattyAcyl]
---allTagFAs tgs = sort . nub $ allAssignedTAGs tgs >>= tagFAs
---
--- totalTagIntensity :: [MS2Spectrum (Mz, Intensity, [Triacylglycerol]) a] -> Intensity
--- totalTagIntensity =  foldOf (folded.precursorIon._2)
---    intensity' (AssignedTAGs specRow _ _) =
---      maybe (Intensity 0) (^.intensity) specRow
---
---normalisedAbundanceFAsIndentified :: AssignedTAGs a -> NormalisedAbundance
---normalisedAbundanceFAsIndentified tags =
---  sum normalisedAbundList
---  where
---    normalisedAbundList =
---      _afNormalisedAbundance <$>
---      filter (isJust . _getAssignedFA) (tags ^. getAssignedFAs)
---
---formatNormalisedAbundanceFAsIndentified tags =
---  tags^.monoisotopicMass.to showVal <>
---  ", " <>
---  (showVal . normalisedAbundanceFAsIndentified $ tags)
---
-
 totalTagIntensity :: [MS2Spectrum (Mz, Intensity, [Triacylglycerol]) a] -> Intensity
 totalTagIntensity = foldOf (folded.precursorIon._2)
 
 correctionRatio :: Intensity -> Intensity -> Double
 correctionRatio i total = (i / total)^.getIntensity
 
----- maybe 0 (\x -> (x ^. getIntensity) / i) r
---
---relativeAbundanceOfTags :: [AssignedTAGs a] -> [Double]
---relativeAbundanceOfTags tgs =
---  correctionRatio (totalTagIntensity tgs) <$> tgs
---
---collectAssignedTagsFas :: AssignedTAGs a -> [(FattyAcyl, NormalisedAbundance)]
---collectAssignedTagsFas tgs = [ (fa, na) | (Just fa, na) <- fattyAcylNormAbun]
---  where
---    assignedFAList = tgs^.tagAssignedFAs.getAssignedFAs
---    fattyAcylNormAbun =
---       zip (assignedFAList^..traverse.getAssignedFA) -- _Just
---           (assignedFAList^..traverse.normalisedAbundance)
---
 data FinalResult = FinalResult {
     _finalResultMz                    :: Mz
   , _finalResultMzNormalisedAbundance :: NormalisedAbundance
@@ -205,13 +142,7 @@ toFinalResults :: [MS2Spectrum (Mz, Intensity, [Triacylglycerol]) (Maybe FattyAc
 toFinalResults specs = toFinalResult totalIntensity <$> specs
   where
     totalIntensity = foldOf (folded.precursorIon._2) specs
---
---tagMzNormalisedAbundances frs =
---  (\x -> show (tagToCondensedTriacylglycerol <$> (x^.finalResultTags)) <> ": " <> take 4 (show (100 * x^.finalResultMzrelativeAbundance)))
---    <$> frs
---
---sumShouldEqual1 frs = sum $ frs^..traverse.finalResultMzrelativeAbundance
---
+
 totalNormalisedAbundance :: Map FattyAcid NormalisedAbundance -> NormalisedAbundance
 totalNormalisedAbundance fas = foldMap (^._2) $ M.toList fas
 
@@ -230,16 +161,7 @@ identifiedFAs frs =
       correctionRatio' fr = fr^.finalResultMzNormalisedAbundance.getNormalisedAbundance
       reCalNormalisedAbundance' fr = reCalNormalisedAbundance (correctionRatio' fr) (fr^.finalResultFAs)
       reCalNormalisedAbundances = fmap reCalNormalisedAbundance' frs
-    --(\x -> reCalNormalisedAbundance (x^.finalResultMzNormalisedAbundance.getNormalisedAbundance))
-    --(frs^..traverse.finalResultFAs)
 
--- mapped._2 %~ sum $ aggResult
---  where
---    aggResult = aggregateAL . concat $
---      zipWith reCalNormalisedAbundance
---              (frs^..traverse.finalResultMzNormalisedAbundance)
---              (frs^..traverse.finalResultFAs)
---
 renderPairNormalisedAbundance :: (Show a) => (a, NormalisedAbundance) -> String
 renderPairNormalisedAbundance (a, na) = show a <> ", " <> showVal na
 
