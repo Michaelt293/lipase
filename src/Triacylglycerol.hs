@@ -6,17 +6,13 @@ module Triacylglycerol where
 import FattyAcid
 import Spectra
 import Isotope hiding (monoisotopicMass)
-import qualified Isotope as I
 import Data.List
-import Data.List.HIUtils
 import Data.Maybe
 import Data.Monoid
-import Data.Ord
 import Data.Map (Map)
 import qualified Data.Map as M
 import Control.Monad
 import Control.Lens
-import Control.Arrow
 
 data Triacylglycerol = Triacylglycerol {
     _fa1 :: FattyAcyl
@@ -28,8 +24,8 @@ makeClassy ''Triacylglycerol
 
 allFAs :: Applicative f =>
   (FattyAcyl -> f FattyAcyl) -> Triacylglycerol -> f Triacylglycerol
-allFAs f (Triacylglycerol fa1 fa2 fa3) =
-  Triacylglycerol <$> f fa1 <*> f fa2 <*> f fa3
+allFAs f (Triacylglycerol fa1' fa2' fa3') =
+  Triacylglycerol <$> f fa1' <*> f fa2' <*> f fa3'
 
 instance Eq Triacylglycerol where
   tg1 == tg2 = sort (tg1^..allFAs) == sort (tg2^..allFAs)
@@ -99,6 +95,7 @@ makeClassy ''CondensedTriacylglycerol
 instance Show CondensedTriacylglycerol where
   show (CondensedTriacylglycerol cs dbs) = "TAG " <> showVal cs <> ":" <> showVal dbs
 
+tagToCondensedTriacylglycerol :: Triacylglycerol -> CondensedTriacylglycerol
 tagToCondensedTriacylglycerol tg =
   CondensedTriacylglycerol
     (foldOf (folded.numCarbons) (tg^..allFAs))

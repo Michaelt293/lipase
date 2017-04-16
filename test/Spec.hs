@@ -1,7 +1,6 @@
 module Main where
 
 import Test.Hspec
-import Test.QuickCheck
 import Lipase.FattyAcidSpec
 import Lipase.SpectraSpec
 import Lipase.TriacylglycerolSpec

@@ -7,7 +7,6 @@ import Data.Maybe
 import Data.List
 import Control.Lens
 import Test.Hspec
-import Test.QuickCheck
 
 tg_161_181_201_spectrum :: [SpectrumCsv]
 tg_161_181_201_spectrum =
@@ -18,8 +17,8 @@ tg_161_181_201_spectrum =
   , SpectrumCsv 885.8 22
   ]
 
-ms_spectrum :: MSSpectrum Mz
-ms_spectrum = mkMSSpectrum
+testMsSpectrum :: MSSpectrum Mz
+testMsSpectrum = mkMSSpectrum
     [ SpectrumCsv 623.5 33
     , SpectrumCsv 732.6 33
     , SpectrumCsv 885.8 1100
@@ -36,7 +35,7 @@ lookup_575 = lookupIon 0.1 575.5 filteredSpectrum
 
 spec :: Spec
 spec = do
-  describe "removePrecursorIon" $
+  describe "removePrecursorIon" .
     it "removePrecursorIon should remove the precursor ion" $
       all (\x -> x^.csvMz /= 885.8)
           (removePrecursorIon 885.8 tg_161_181_201_spectrum)
@@ -59,7 +58,7 @@ spec = do
     it "310.3 Da neutral loss present in the spectrum of TG 16:1_18:1_20:1"
       (isJust . lookupIon 0.4 310.3 $ calNeutralLosses filteredSpectrum)
 
-  describe "assignFAsFromNeutralLoss" $
+  describe "assignFAsFromNeutralLoss" .
     it "Should identify the fatty acids that make up TG 16:1_18:1_20:1" $
       sort ((assignFAsFromNeutralLoss . calNeutralLosses) filteredSpectrum
         ^..ms2Spectrum.traverse.ion._Just) `shouldBe`
@@ -68,9 +67,9 @@ spec = do
         , FattyAcid (FattyAcyl 20 1)
         ]
 
-  describe "findPossibleTAGs" $
+  describe "findPossibleTAGs" .
     it "TG 16:1_18:1_20:1 spectrum should identify TG 16:1_18:1_20:1 and TG 18:1_18:1_18:1" $
-      (findPossibleTAGs ms_spectrum . assignFAsFromNeutralLoss . calNeutralLosses)
+      (findPossibleTAGs testMsSpectrum . assignFAsFromNeutralLoss . calNeutralLosses)
         filteredSpectrum^.precursorIon `shouldBe`
         (885.5, 1100,
         [ Triacylglycerol (FattyAcyl 16 1)

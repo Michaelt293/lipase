@@ -5,7 +5,6 @@ module FattyAcid where
 import qualified Isotope as I
 import Isotope hiding (monoisotopicMass)
 import Spectra
-import Data.Maybe
 import Data.Monoid
 import Control.Lens
 
@@ -74,26 +73,37 @@ instance ToMolecularFormula FattyAcid where
 instance ToElementalComposition FattyAcid where
   toElementalComposition = toElementalComposition . toMolecularFormula
 
+c10_0 :: FattyAcid
 c10_0 = FattyAcid (FattyAcyl 10 0)
 
+c12_0 :: FattyAcid
 c12_0 = FattyAcid (FattyAcyl 12 0)
 
+c14s :: [FattyAcid]
 c14s = FattyAcid . FattyAcyl 14 <$> [0, 1]
 
+c15s :: [FattyAcid]
 c15s = FattyAcid . FattyAcyl 15 <$> [0, 1]
 
+c16s :: [FattyAcid]
 c16s = FattyAcid . FattyAcyl 16 <$> [0, 1, 2]
 
+c17s :: [FattyAcid]
 c17s = FattyAcid . FattyAcyl 17 <$> [0, 1]
 
+c18s :: [FattyAcid]
 c18s = FattyAcid . FattyAcyl 18 <$> [0, 1, 2, 3, 4]
 
+c19s :: [FattyAcid]
 c19s = FattyAcid . FattyAcyl 19 <$> [0, 1]
 
+c20s :: [FattyAcid]
 c20s = FattyAcid . FattyAcyl 20 <$> [0, 1, 2, 3, 4, 5]
 
+c21s :: [FattyAcid]
 c21s = FattyAcid . FattyAcyl 21 <$> [0, 1]
 
+c22s :: [FattyAcid]
 c22s = FattyAcid . FattyAcyl 22 <$> [0, 1, 2, 3, 4, 5, 6]
 
 evenChainFAs :: [FattyAcid]
@@ -116,6 +126,6 @@ assignFA :: MonoisotopicMass -> MonoisotopicMass -> [FattyAcid] -> Maybe FattyAc
 assignFA n m fas =
   case fas of
     [] -> Nothing
-    fa:fas -> if withinTolerance n m (I.monoisotopicMass fa)
+    fa:fas' -> if withinTolerance n m (I.monoisotopicMass fa)
               then Just fa
-              else assignFA n m fas
+              else assignFA n m fas'
