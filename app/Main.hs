@@ -1,16 +1,13 @@
 module Main where
 
-import Isotope
 import Spectra
 import FattyAcid
 import Triacylglycerol
 import System.Environment
 import Data.List
 import Data.Char
-import Data.Maybe
 import Data.Monoid
 import System.Directory
-import Data.List.Split
 
 findPrecursorIonMz :: String -> Mz
 findPrecursorIonMz fileName =
@@ -31,7 +28,7 @@ main = do
       readCsv = process . (\csvFile -> dir <> "/" <> csvFile)
   unprocessedMSSpectrum <- readCsv msSpectrumFile
   unprocessedMS2Spectra <- traverse readCsv ms2SpectraFiles
-  let msSpectrum = mkMSSpectrum unprocessedMSSpectrum
+  let msSpectrum' = mkMSSpectrum unprocessedMSSpectrum
       ms2Spectra = sort $ filterByRelativeAbundance (> 5) <$>
                           zipWith
                             mkMS2SpectrumRemovePrecursor
@@ -39,7 +36,7 @@ main = do
                             unprocessedMS2Spectra
       neutralLossSpectra = calNeutralLosses <$> ms2Spectra
       fasFromNeutralLoss = assignFAsFromNeutralLoss <$> neutralLossSpectra
-      tagsFromAssignedFas = findPossibleTAGs msSpectrum <$> fasFromNeutralLoss
+      tagsFromAssignedFas = findPossibleTAGs msSpectrum' <$> fasFromNeutralLoss
       finalResults = toFinalResults tagsFromAssignedFas
       -- Results
       identifiedFAs' = identifiedFAs finalResults

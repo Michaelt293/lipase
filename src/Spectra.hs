@@ -15,15 +15,11 @@ import Isotope hiding (monoisotopicMass)
 import Data.List
 import Data.Ord
 import Data.Monoid
-import Data.Bifunctor
 import Data.Csv
-import Data.Text (Text)
-import Data.Vector (Vector, toList)
-import Numeric
+import Data.Vector (toList)
 import Control.Lens
 
 import qualified Data.ByteString.Lazy
-import qualified Data.Csv
 
 makeClassy ''MonoisotopicMass
 
@@ -113,7 +109,7 @@ instance HasRelativeAbundance (SpectrumRow a) where
 
 instance Show a => Show (SpectrumRow a) where
   show (SpectrumRow m i r n) =
-    intercalate ", " [show m, show i, show m, show n]
+    intercalate ", " [show m, show i, show r, show n]
 
 newtype MSSpectrum a = MSSpectrum
   { _msSpectrum :: [SpectrumRow a] }
@@ -130,7 +126,7 @@ makeLenses ''SpectrumCsv
 
 instance FromNamedRecord SpectrumCsv where
   parseNamedRecord m =
-    (\mz i -> SpectrumCsv (Mz mz) (Intensity i))
+    (\mz' i -> SpectrumCsv (Mz mz') (Intensity i))
       <$> m .: "m/z"
       <*> m .: "Intensity"
 
@@ -175,20 +171,20 @@ makeLenses ''MS2Spectrum
 lookupIon :: (Num b, Ord b) => b -> b -> MS2Spectrum a b -> Maybe (SpectrumRow b)
 lookupIon n i (MS2Spectrum _ rs) = loop n i rs
   where
-    loop n i rs =
-      case rs of
+    loop n' i' rs' =
+      case rs' of
         [] -> Nothing
-        r:rs' -> if withinTolerance n i (r^.ion)
-                   then Just r
-                   else loop n i rs'
+        r':rs'' -> if withinTolerance n' i' (r'^.ion)
+                   then Just r'
+                   else loop n' i' rs''
 
 removePrecursorIon :: Mz -> [SpectrumCsv] -> [SpectrumCsv]
 removePrecursorIon prec =
   filter (^.csvMz.to (< prec - 2))
 
 mkMS2SpectrumRemovePrecursor :: Mz -> [SpectrumCsv] -> MS2Spectrum Mz Mz
-mkMS2SpectrumRemovePrecursor mz rs =
-  MS2Spectrum mz . insertAbundances $ removePrecursorIon mz rs
+mkMS2SpectrumRemovePrecursor mz' rs =
+  MS2Spectrum mz' . insertAbundances $ removePrecursorIon mz' rs
 
 filterByRelativeAbundance ::
   (RelativeAbundance -> Bool) -> MS2Spectrum a b -> MS2Spectrum a b

@@ -3,7 +3,6 @@ module Lipase.FattyAcidSpec (spec) where
 import Isotope
 import FattyAcid
 import Test.Hspec
-import Test.QuickCheck
 
 spec :: Spec
 spec = do
