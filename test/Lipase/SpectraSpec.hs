@@ -3,6 +3,7 @@ module Lipase.SpectraSpec (spec) where
 import Spectra
 import FattyAcid
 import Triacylglycerol
+import Isotope.Ion
 import Data.Maybe
 import Data.List
 import Control.Lens

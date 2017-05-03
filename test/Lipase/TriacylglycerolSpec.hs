@@ -4,6 +4,7 @@ import Triacylglycerol
 import FattyAcid
 import Spectra
 import Isotope
+import Isotope.Ion
 import Data.List
 import Test.Hspec
 
@@ -20,11 +21,11 @@ spec :: Spec
 spec = do
   describe "Elemental composition for Triacylglycerol" .
     it "Trioleoylglycerol elemental composition should be C57H104O6" $
-      toMolecularFormula tg_181_181_181
-      `shouldBe` mkMolecularFormula [(C,57), (H, 104), (O, 6)]
+      toElementalComposition tg_181_181_181
+      `shouldBe` mkElementalComposition [(C,57), (H, 104), (O, 6)]
 
   describe "possibleTAGs" .
-    it "Trioleoylglycerol elemental composition should be C57H104O6" $
+    it "possibleTAGs 0.3 885.8 with 16:1, 18:1 and 20:1" $
       sort (possibleTAGs 0.3 885.8 [ FattyAcid (FattyAcyl 16 1)
                                    , FattyAcid (FattyAcyl 18 1)
                                    , FattyAcid (FattyAcyl 20 1)

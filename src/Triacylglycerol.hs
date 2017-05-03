@@ -3,16 +3,19 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Triacylglycerol where
 
+import Control.Lens
+
 import FattyAcid
 import Spectra
 import Isotope hiding (monoisotopicMass)
-import Data.List
-import Data.Maybe
-import Data.Monoid
+import Isotope.Ion
+import Data.List (sort, intercalate, nub)
+import Data.Maybe (fromJust, isJust)
+import Data.Monoid ((<>))
 import Data.Map (Map)
 import qualified Data.Map as M
-import Control.Monad
-import Control.Lens
+import Control.Monad (guard)
+
 
 data Triacylglycerol = Triacylglycerol {
     _fa1 :: FattyAcyl
@@ -37,27 +40,11 @@ instance Show Triacylglycerol where
   show tg =
     "TG(" <> intercalate "_" (tg^..allFAs.to show) <> ")"
 
-instance ToMolecularFormula Triacylglycerol where
-  toMolecularFormula tg =
-    mkMolecularFormula [(C, 3), (H, 5)] <>
-    foldMap toMolecularFormula (tg^..allFAs)
-
 instance ToElementalComposition Triacylglycerol where
-  toElementalComposition = toElementalComposition . toMolecularFormula
-
-newtype Protonated a = Protonated { _getProtonatedIon :: a }
-  deriving (Eq, Ord)
-
-instance ToMolecularFormula a => ToMolecularFormula (Protonated a) where
-  toMolecularFormula (Protonated p) =
-    toMolecularFormula p |+| mkMolecularFormula [(H, 1)]
-
-instance ToElementalComposition a => ToElementalComposition (Protonated a) where
-  toElementalComposition (Protonated p) =
-    toElementalComposition p |+| mkElementalComposition [(H, 1)]
-
-instance ToElementalComposition a => Ion (Protonated a) where
-  charge _ = 1
+  toElementalComposition tg =
+    mkElementalComposition [(C, 3), (H, 5)] <>
+    foldMap toElementalComposition (tg^..allFAs)
+  charge _ = Just 0
 
 makeLenses ''Protonated
 
@@ -93,7 +80,7 @@ data CondensedTriacylglycerol = CondensedTriacylglycerol {
 makeClassy ''CondensedTriacylglycerol
 
 instance Show CondensedTriacylglycerol where
-  show (CondensedTriacylglycerol cs dbs) = "TAG " <> showVal cs <> ":" <> showVal dbs
+  show (CondensedTriacylglycerol cs dbs) = "TAG " <> show cs <> ":" <> show dbs
 
 tagToCondensedTriacylglycerol :: Triacylglycerol -> CondensedTriacylglycerol
 tagToCondensedTriacylglycerol tg =
@@ -160,7 +147,7 @@ identifiedFAs frs =
       reCalNormalisedAbundances = fmap reCalNormalisedAbundance' frs
 
 renderPairNormalisedAbundance :: (Show a) => (a, NormalisedAbundance) -> String
-renderPairNormalisedAbundance (a, na) = show a <> ", " <> showVal na
+renderPairNormalisedAbundance (a, na) = show a <> ", " <> show na
 
 identifiedTags :: [FinalResult] -> [Triacylglycerol]
 identifiedTags frs = sort . nub $ frs^..traverse.finalResultTags.traverse

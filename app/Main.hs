@@ -3,11 +3,12 @@ module Main where
 import Spectra
 import FattyAcid
 import Triacylglycerol
-import System.Environment
-import Data.List
-import Data.Char
-import Data.Monoid
-import System.Directory
+import Isotope.Ion (Mz(..))
+import System.Environment (getArgs)
+import System.Directory (getDirectoryContents)
+import Data.List (isSuffixOf, isInfixOf, sort, intercalate)
+import Data.Char (isDigit)
+import Data.Monoid ((<>))
 
 findPrecursorIonMz :: String -> Mz
 findPrecursorIonMz fileName =

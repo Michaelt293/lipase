@@ -10,49 +10,36 @@
 
 module Spectra where
 
-import qualified Isotope as I
-import Isotope hiding (monoisotopicMass)
-import Data.List
-import Data.Ord
-import Data.Monoid
-import Data.Csv
-import Data.Vector (toList)
 import Control.Lens
 
+import Isotope ( MonoisotopicMass
+               , ToElementalComposition(..)
+               , MonoisotopicMass(..)
+               )
+import Isotope.Ion (Mz(..))
+import Data.List (intercalate)
+import Data.Foldable (maximumBy)
+import Data.Ord (comparing)
+import Data.Monoid ((<>))
+import Data.Csv (FromNamedRecord(..), decodeByName, (.:))
+import Data.Vector (toList)
 import qualified Data.ByteString.Lazy
 
 makeClassy ''MonoisotopicMass
-
-class ShowVal a where
-  showVal :: a -> String
-
-newtype Charge = Charge { getCharge :: Int }
-  deriving (Show, Eq, Ord, Num)
-
-newtype Mz = Mz { _getMz :: Double }
-  deriving (Show, Eq, Ord, Num, Fractional)
-
-makeLenses ''Mz
-
-class ToElementalComposition a => Ion a where
-  charge                  :: a -> Charge
-  mz                      :: a -> Mz
-  mz a = Mz $ monoisotopicMass' / charge'
-    where
-      monoisotopicMass' =
-        getMonoisotopicMass . I.monoisotopicMass . toElementalComposition $ a
-      charge' = fromIntegral . getCharge . charge $ a
-  {-# MINIMAL charge #-}
 
 deriving instance Num MonoisotopicMass
 
 deriving instance Fractional MonoisotopicMass
 
-instance ShowVal MonoisotopicMass where
-  showVal (MonoisotopicMass v) = show v
+deriving instance Num Mz
+
+deriving instance Fractional Mz
+
+showMonoisotopicMass :: MonoisotopicMass -> String
+showMonoisotopicMass (MonoisotopicMass v) = show v
 
 newtype Intensity = Intensity { _getIntensity :: Double }
-  deriving (Show, Eq, Ord, Num, Fractional)
+  deriving (Eq, Ord, Num, Fractional)
 
 makeClassy ''Intensity
 
@@ -60,12 +47,12 @@ instance Monoid Intensity where
   mempty = 0
   mappend = (+)
 
-instance ShowVal Intensity where
-  showVal (Intensity v) = show v
+instance Show Intensity where
+  show (Intensity v) = show v
 
 newtype RelativeAbundance = RelativeAbundance {
   _getRelativeAbundance :: Double
-} deriving (Show, Eq, Ord, Num, Fractional) -- write show instance, 2 d.p, add "%"
+} deriving (Eq, Ord, Num, Fractional) -- write show instance, 2 d.p, add "%"
 
 makeClassy ''RelativeAbundance
 
@@ -73,12 +60,12 @@ instance Monoid RelativeAbundance where
   mempty = 0
   mappend = (+)
 
-instance ShowVal RelativeAbundance where
-  showVal (RelativeAbundance v) = show v
+instance Show RelativeAbundance where
+  show (RelativeAbundance v) = show v
 
 newtype NormalisedAbundance =  NormalisedAbundance {
   _getNormalisedAbundance :: Double -- write show instance, 2 d.p, add "%"
-} deriving (Show, Eq, Ord, Num, Fractional)
+} deriving (Eq, Ord, Num, Fractional)
 
 makeClassy ''NormalisedAbundance
 
@@ -86,8 +73,8 @@ instance Monoid NormalisedAbundance where
   mempty = 0
   mappend = (+)
 
-instance ShowVal NormalisedAbundance where
-  showVal (NormalisedAbundance v) = show v
+instance Show NormalisedAbundance where
+  show (NormalisedAbundance v) = show v
 
 data SpectrumRow a = SpectrumRow {
     _ion                   :: a
@@ -175,8 +162,8 @@ lookupIon n i (MS2Spectrum _ rs) = loop n i rs
       case rs' of
         [] -> Nothing
         r':rs'' -> if withinTolerance n' i' (r'^.ion)
-                   then Just r'
-                   else loop n' i' rs''
+                     then Just r'
+                     else loop n' i' rs''
 
 removePrecursorIon :: Mz -> [SpectrumCsv] -> [SpectrumCsv]
 removePrecursorIon prec =
@@ -197,7 +184,7 @@ filterByNormalisedAbundance p =
   ms2Spectrum %~ filter (^.normalisedAbundance.to p)
 
 calNeutralLoss :: Mz -> Mz -> MonoisotopicMass
-calNeutralLoss prec frag = (prec - frag)^.getMz.to MonoisotopicMass
+calNeutralLoss prec frag = MonoisotopicMass . getMz $ prec - frag
 
 calNeutralLosses :: MS2Spectrum Mz Mz -> MS2Spectrum Mz MonoisotopicMass
 calNeutralLosses spec = calNeutralLoss (spec^.precursorIon) <$> spec

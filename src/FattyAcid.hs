@@ -2,14 +2,15 @@
 {-# LANGUAGE TemplateHaskell #-}
 module FattyAcid where
 
-import qualified Isotope as I
-import Isotope hiding (monoisotopicMass)
-import Spectra
-import Data.Monoid
 import Control.Lens
 
+import Spectra
+import qualified Isotope as I
+import Isotope hiding (monoisotopicMass)
+import Data.Monoid ((<>))
+
 newtype NumCarbons = NumCarbons { _getNumCarbons :: Int }
-  deriving (Show, Eq, Ord, Num)
+  deriving (Eq, Ord, Num)
 
 makeClassy ''NumCarbons
 
@@ -17,11 +18,11 @@ instance Monoid NumCarbons where
   mempty = 0
   mappend = (+)
 
-instance ShowVal NumCarbons where
-  showVal (NumCarbons n) = show n
+instance Show NumCarbons where
+  show (NumCarbons n) = show n
 
 newtype NumDoubleBonds = NumDoubleBonds { _getNumDoubleBonds :: Int }
-  deriving (Show, Eq, Ord, Num)
+  deriving (Eq, Ord, Num)
 
 makeClassy ''NumDoubleBonds
 
@@ -29,8 +30,8 @@ instance Monoid NumDoubleBonds where
   mempty = 0
   mappend = (+)
 
-instance ShowVal NumDoubleBonds where
-  showVal (NumDoubleBonds n) = show n
+instance Show NumDoubleBonds where
+  show (NumDoubleBonds n) = show n
 
 data FattyAcyl = FattyAcyl {
     _fattyAcylCarbons     :: NumCarbons
@@ -46,12 +47,13 @@ instance HasNumDoubleBonds FattyAcyl where
   numDoubleBonds = fattyAcylDoubleBonds
 
 instance Show FattyAcyl where
-  show (FattyAcyl cs dbs) = showVal cs <> ":" <> showVal dbs
+  show (FattyAcyl cs dbs) = show cs <> ":" <> show dbs
 
 instance ToMolecularFormula FattyAcyl where
   toMolecularFormula (FattyAcyl cs dbs) = mkMolecularFormula
     [ (C, cs^.getNumCarbons)
-    , (H, cs^.getNumCarbons.to (\x -> x * 2 - 1) - dbs^.getNumDoubleBonds.to (*2))
+    , (H, cs^.getNumCarbons.to (\x -> x * 2 - 1) -
+          dbs^.getNumDoubleBonds.to (*2))
     , (O, 2)
     ]
 
@@ -64,11 +66,11 @@ newtype FattyAcid = FattyAcid { _getFattyAcyl :: FattyAcyl }
 makeLenses ''FattyAcid
 
 instance Show FattyAcid where
-  show (FattyAcid a) = show a
+  show (FattyAcid a) = "FA " <> show a
 
 instance ToMolecularFormula FattyAcid where
   toMolecularFormula (FattyAcid fa) =
-    toMolecularFormula fa |+| mkMolecularFormula [(H, 1)]
+    toMolecularFormula fa <> mkMolecularFormula [(H, 1)]
 
 instance ToElementalComposition FattyAcid where
   toElementalComposition = toElementalComposition . toMolecularFormula
@@ -118,14 +120,16 @@ fattyAcids = evenChainFAs <> oddChainFAs
 fattyAcidMonoisotopicMasses :: [MonoisotopicMass]
 fattyAcidMonoisotopicMasses = I.monoisotopicMass <$> fattyAcids
 
-assignFAsFromNeutralLoss :: MS2Spectrum a MonoisotopicMass -> MS2Spectrum a (Maybe FattyAcid)
+assignFAsFromNeutralLoss
+  :: MS2Spectrum a MonoisotopicMass -> MS2Spectrum a (Maybe FattyAcid)
 assignFAsFromNeutralLoss =
   fmap (\nl -> assignFA 0.4 nl fattyAcids)
 
-assignFA :: MonoisotopicMass -> MonoisotopicMass -> [FattyAcid] -> Maybe FattyAcid
+assignFA
+  :: MonoisotopicMass -> MonoisotopicMass -> [FattyAcid] -> Maybe FattyAcid
 assignFA n m fas =
   case fas of
     [] -> Nothing
     fa:fas' -> if withinTolerance n m (I.monoisotopicMass fa)
-              then Just fa
-              else assignFA n m fas'
+                 then Just fa
+                 else assignFA n m fas'
