@@ -13,11 +13,10 @@ module Spectra where
 import Control.Lens
 
 import Isotope ( MonoisotopicMass
-               , ToElementalComposition(..)
                , MonoisotopicMass(..)
                )
 import Isotope.Ion (Mz(..))
-import Data.List (intercalate)
+import Data.List (intercalate, find)
 import Data.Foldable (maximumBy)
 import Data.Ord (comparing)
 import Data.Monoid ((<>))
@@ -156,14 +155,8 @@ data MS2Spectrum a b = MS2Spectrum {
 makeLenses ''MS2Spectrum
 
 lookupIon :: (Num b, Ord b) => b -> b -> MS2Spectrum a b -> Maybe (SpectrumRow b)
-lookupIon n i (MS2Spectrum _ rs) = loop n i rs
-  where
-    loop n' i' rs' =
-      case rs' of
-        [] -> Nothing
-        r':rs'' -> if withinTolerance n' i' (r'^.ion)
-                     then Just r'
-                     else loop n' i' rs''
+lookupIon n i (MS2Spectrum _ rs) =
+  find (\r' -> withinTolerance n i (r'^.ion)) rs
 
 removePrecursorIon :: Mz -> [SpectrumCsv] -> [SpectrumCsv]
 removePrecursorIon prec =

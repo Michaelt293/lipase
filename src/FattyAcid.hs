@@ -8,6 +8,7 @@ import Spectra
 import qualified Isotope as I
 import Isotope hiding (monoisotopicMass)
 import Data.Monoid ((<>))
+import Data.List
 
 newtype NumCarbons = NumCarbons { _getNumCarbons :: Int }
   deriving (Eq, Ord, Num)
@@ -124,9 +125,4 @@ assignFAsFromNeutralLoss =
 
 assignFA
   :: MonoisotopicMass -> MonoisotopicMass -> [FattyAcid] -> Maybe FattyAcid
-assignFA n m fas =
-  case fas of
-    [] -> Nothing
-    fa:fas' -> if withinTolerance n m (I.monoisotopicMass fa)
-                 then Just fa
-                 else assignFA n m fas'
+assignFA n m = find (withinTolerance n m . I.monoisotopicMass)
