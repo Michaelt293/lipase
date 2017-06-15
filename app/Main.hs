@@ -6,7 +6,8 @@ import Triacylglycerol
 import Isotope.Ion (Mz(..))
 import System.Environment (getArgs)
 import System.Directory (getDirectoryContents)
-import Data.List (isSuffixOf, isInfixOf, sort, intercalate)
+import Data.Foldable (traverse_)
+import Data.List (isSuffixOf, isInfixOf, sort)
 import Data.Char (isDigit)
 import Data.Monoid ((<>))
 
@@ -41,14 +42,16 @@ main = do
       finalResults = toFinalResults tagsFromAssignedFas
       -- Results
       identifiedFAs' = identifiedFAs finalResults
-      identifiedTags' = identifiedTags finalResults
+      identifiedTags' = identifiedTAGSummary finalResults
       allTagFAs' = allTagFAs finalResults
       identifiedCondensedTags' = identifiedCondensedTags finalResults
   putStrLn "Total tentatively assigned fatty acids with normalised abundances:"
-  putStrLn . intercalate "\n" $ renderPairNormalisedAbundance <$> identifiedFAs'
+  traverse_ putStrLn $ renderPairNormalisedAbundance <$> identifiedFAs'
   putStrLn "Total assigned triacylglycerols:"
-  putStrLn . unwords $ show <$> identifiedTags'
+  traverse_ putStrLn $
+    (\(x, y) -> unwords (show <$> x) <> " : " <> unwords (show <$> y)) <$>
+    sort identifiedTags'
   putStrLn "Total triacylglycerol fatty acids:"
   putStrLn . unwords $ show <$> allTagFAs'
   putStrLn "Total condensed triacylglycerols with normalised abundances:"
-  putStrLn . intercalate "\n" $ renderPairNormalisedAbundance <$> identifiedCondensedTags'
+  traverse_ putStrLn $ renderPairNormalisedAbundance <$> identifiedCondensedTags'

@@ -33,9 +33,6 @@ allFAs f (Triacylglycerol fa1' fa2' fa3') =
 instance Eq Triacylglycerol where
   tg1 == tg2 = sort (tg1^..allFAs) == sort (tg2^..allFAs)
 
-instance Ord Triacylglycerol where
-  tg1 <= tg2 = sort (tg1^..allFAs) <= sort (tg2^..allFAs)
-
 instance Show Triacylglycerol where
   show tg =
     "TG(" <> intercalate "_" (tg^..allFAs.to show) <> ")"
@@ -80,13 +77,20 @@ data CondensedTriacylglycerol = CondensedTriacylglycerol {
 makeClassy ''CondensedTriacylglycerol
 
 instance Show CondensedTriacylglycerol where
-  show (CondensedTriacylglycerol cs dbs) = "TAG " <> show cs <> ":" <> show dbs
+  show (CondensedTriacylglycerol cs dbs) = "TG " <> show cs <> ":" <> show dbs
 
 tagToCondensedTriacylglycerol :: Triacylglycerol -> CondensedTriacylglycerol
 tagToCondensedTriacylglycerol tg =
   CondensedTriacylglycerol
     (foldOf (folded.numCarbons) (tg^..allFAs))
     (foldOf (folded.numDoubleBonds) (tg^..allFAs))
+
+instance Ord Triacylglycerol where
+  tg1 `compare` tg2 =
+    case tagToCondensedTriacylglycerol tg1 `compare` tagToCondensedTriacylglycerol tg2 of
+      LT -> LT
+      EQ -> sort (tg1^..allFAs) `compare` sort (tg2^..allFAs)
+      GT -> GT
 
 tagsToCondensedTags :: [Triacylglycerol] -> [CondensedTriacylglycerol]
 tagsToCondensedTags tags = nub $ tagToCondensedTriacylglycerol <$> tags
@@ -151,6 +155,12 @@ renderPairNormalisedAbundance (a, na) = show a <> ", " <> show na
 
 identifiedTags :: [FinalResult] -> [Triacylglycerol]
 identifiedTags frs = sort . nub $ frs^..traverse.finalResultTags.traverse
+
+identifiedTAGSummary :: [FinalResult] -> [([CondensedTriacylglycerol], [Triacylglycerol])]
+identifiedTAGSummary frs = filter (/= ([],[])) $
+  zip (fmap tagsToCondensedTags finalTags) finalTags
+      where
+        finalTags = frs^..traverse.finalResultTags
 
 allTagFAs :: [FinalResult] -> [FattyAcid]
 allTagFAs frs = sort . nub . concat $ fmap M.keys (frs^..traverse.finalResultFAs)

@@ -49,16 +49,14 @@ instance HasNumDoubleBonds FattyAcyl where
 instance Show FattyAcyl where
   show (FattyAcyl cs dbs) = show cs <> ":" <> show dbs
 
-instance ToMolecularFormula FattyAcyl where
-  toMolecularFormula (FattyAcyl cs dbs) = mkMolecularFormula
+instance ToElementalComposition FattyAcyl where
+  toElementalComposition (FattyAcyl cs dbs) = mkElementalComposition
     [ (C, cs^.getNumCarbons)
     , (H, cs^.getNumCarbons.to (\x -> x * 2 - 1) -
           dbs^.getNumDoubleBonds.to (*2))
     , (O, 2)
     ]
-
-instance ToElementalComposition FattyAcyl where
-  toElementalComposition = toElementalComposition . toMolecularFormula
+  charge _ = Just 0
 
 newtype FattyAcid = FattyAcid { _getFattyAcyl :: FattyAcyl }
   deriving (Eq, Ord)
@@ -68,12 +66,11 @@ makeLenses ''FattyAcid
 instance Show FattyAcid where
   show (FattyAcid a) = "FA " <> show a
 
-instance ToMolecularFormula FattyAcid where
-  toMolecularFormula (FattyAcid fa) =
-    toMolecularFormula fa <> mkMolecularFormula [(H, 1)]
-
 instance ToElementalComposition FattyAcid where
-  toElementalComposition = toElementalComposition . toMolecularFormula
+  toElementalComposition (FattyAcid fa) =
+    toElementalComposition fa <> mkElementalComposition [(H, 1)]
+  charge _ = Just 0
+
 
 c10_0 :: FattyAcid
 c10_0 = FattyAcid (FattyAcyl 10 0)
