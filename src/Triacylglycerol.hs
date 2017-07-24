@@ -1,26 +1,25 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Triacylglycerol where
 
 import Control.Lens
-
 import FattyAcid
 import Spectra
 import Isotope hiding (monoisotopicMass)
 import Isotope.Ion
 import Data.List (sort, intercalate, nub)
-import Data.Maybe (fromJust, isJust)
 import Data.Monoid ((<>))
-import Data.Map (Map)
-import qualified Data.Map as M
+import Data.Csv (ToField(..))
+import Data.ByteString.Char8 (pack)
 import Control.Monad (guard)
 
 
 data Triacylglycerol = Triacylglycerol {
-    _fa1 :: FattyAcyl
-  , _fa2 :: FattyAcyl
-  , _fa3 :: FattyAcyl
+    _fa1 :: !FattyAcyl
+  , _fa2 :: !FattyAcyl
+  , _fa3 :: !FattyAcyl
 }
 
 makeClassy ''Triacylglycerol
@@ -35,7 +34,7 @@ instance Eq Triacylglycerol where
 
 instance Show Triacylglycerol where
   show tg =
-    "TG(" <> intercalate "_" (tg^..allFAs.to show) <> ")"
+    "TG " <> intercalate "_" (tg^..allFAs.to show)
 
 instance ToElementalComposition Triacylglycerol where
   toElementalComposition tg =
@@ -43,7 +42,26 @@ instance ToElementalComposition Triacylglycerol where
     foldMap toElementalComposition (tg^..allFAs)
   charge _ = Just 0
 
-makeLenses ''Protonated
+instance ToField [CondensedTriacylglycerol] where
+  toField tags =
+    if null tags
+      then "no triacylglycerols identified"
+      else pack . intercalate ", " $ show <$> tags
+
+instance ToField [Triacylglycerol] where
+  toField tags =
+    if null tags
+      then "no triacylglycerols identified"
+      else pack . intercalate ", " $ show <$> tags
+
+instance IsSaturated Triacylglycerol where
+  isSaturated tag = foldOf (allFAs.numDoubleBonds) tag == 0
+
+instance IsMonounsaturated Triacylglycerol where
+  isMonounsaturated tag = foldOf (allFAs.numDoubleBonds) tag == 1
+
+instance IsPolyunsaturated Triacylglycerol where
+  isPolyunsaturated tag = foldOf (allFAs.numDoubleBonds) tag > 1
 
 tagFAs :: Triacylglycerol -> [FattyAcyl]
 tagFAs tg = nub $ tg^..allFAs
@@ -60,7 +78,9 @@ possibleTAGs n prec fas = nub $ do
   return Triacylglycerol {..}
 
 findPossibleTAGs
-  :: MSSpectrum Mz -> MS2Spectrum Mz (Maybe FattyAcid) -> MS2Spectrum (Mz, Intensity, [Triacylglycerol]) (Maybe FattyAcid)
+  :: MSSpectrum Mz
+  -> MS2Spectrum Mz (Maybe FattyAcid)
+  -> MS2Spectrum (Mz, Intensity, [Triacylglycerol]) (Maybe FattyAcid)
 findPossibleTAGs msSpec ms2Spec =
   precursorIon .~ (precursorIon', intensity', tags) $ ms2Spec
     where
@@ -70,8 +90,8 @@ findPossibleTAGs msSpec ms2Spec =
       intensity' = findPrecursorIon 0.4 precursorIon' msSpec^._Just.intensity
 
 data CondensedTriacylglycerol = CondensedTriacylglycerol {
-    _totalFACarbons        :: NumCarbons
-  , _totalFANumDoubleBonds :: NumDoubleBonds
+    _totalFACarbons        :: !NumCarbons
+  , _totalFANumDoubleBonds :: !NumDoubleBonds
 } deriving (Eq, Ord)
 
 makeClassy ''CondensedTriacylglycerol
@@ -100,72 +120,3 @@ totalTagIntensity = foldOf (folded.precursorIon._2)
 
 correctionRatio :: Intensity -> Intensity -> Double
 correctionRatio i total = (i / total)^.getIntensity
-
-data FinalResult = FinalResult {
-    _finalResultMz                    :: Mz
-  , _finalResultMzNormalisedAbundance :: NormalisedAbundance
-  , _finalResultFAs                   :: Map FattyAcid NormalisedAbundance
-  , _finalResultTags                  :: [Triacylglycerol]
-} deriving (Show, Eq, Ord)
-
-makeLenses ''FinalResult
-
-instance HasNormalisedAbundance FinalResult where
-  normalisedAbundance = finalResultMzNormalisedAbundance
---
-toFinalResult :: Intensity -> MS2Spectrum (Mz, Intensity, [Triacylglycerol]) (Maybe FattyAcid) -> FinalResult
-toFinalResult totalIntensity spec =
-  FinalResult (spec^.precursorIon._1)
-              (NormalisedAbundance correctionRatio')
-              (M.fromList (fmap (\x -> (x^.ion.to fromJust, x^.normalisedAbundance)) spectrumRows))
-              (spec^.precursorIon._3)
-  where
-    spectrumRows :: [SpectrumRow (Maybe FattyAcid)]
-    spectrumRows = spec^..ms2Spectrum.folded.filtered (\x -> x^.ion.to isJust)
-    correctionRatio' :: Double
-    correctionRatio' = correctionRatio (spec^.precursorIon._2) totalIntensity
-
---
-toFinalResults :: [MS2Spectrum (Mz, Intensity, [Triacylglycerol]) (Maybe FattyAcid)] -> [FinalResult]
-toFinalResults specs = toFinalResult totalIntensity <$> specs
-  where
-    totalIntensity = foldOf (folded.precursorIon._2) specs
-
-totalNormalisedAbundance :: Map FattyAcid NormalisedAbundance -> NormalisedAbundance
-totalNormalisedAbundance fas = foldMap (^._2) $ M.toList fas
-
-reCalNormalisedAbundance ::
-  Double -> Map FattyAcid NormalisedAbundance -> Map FattyAcid NormalisedAbundance
-reCalNormalisedAbundance n fas = M.fromList $
-  mapped._2.getNormalisedAbundance %~ (*n) $ M.toList fas
-
-identifiedFAs :: [FinalResult] -> [(FattyAcid, NormalisedAbundance)]
-identifiedFAs frs =
-  sort . M.toList $ foldr
-    (M.unionWith mappend)
-    M.empty
-    reCalNormalisedAbundances
-    where
-      correctionRatio' fr = fr^.finalResultMzNormalisedAbundance.getNormalisedAbundance
-      reCalNormalisedAbundance' fr = reCalNormalisedAbundance (correctionRatio' fr) (fr^.finalResultFAs)
-      reCalNormalisedAbundances = fmap reCalNormalisedAbundance' frs
-
-renderPairNormalisedAbundance :: (Show a) => (a, NormalisedAbundance) -> String
-renderPairNormalisedAbundance (a, na) = show a <> ", " <> show na
-
-identifiedTags :: [FinalResult] -> [Triacylglycerol]
-identifiedTags frs = sort . nub $ frs^..traverse.finalResultTags.traverse
-
-identifiedTAGSummary :: [FinalResult] -> [([CondensedTriacylglycerol], [Triacylglycerol])]
-identifiedTAGSummary frs = filter (/= ([],[])) $
-  zip (fmap tagsToCondensedTags finalTags) finalTags
-      where
-        finalTags = frs^..traverse.finalResultTags
-
-allTagFAs :: [FinalResult] -> [FattyAcid]
-allTagFAs frs = sort . nub . concat $ fmap M.keys (frs^..traverse.finalResultFAs)
-
-identifiedCondensedTags :: [FinalResult] -> [([CondensedTriacylglycerol], NormalisedAbundance)]
-identifiedCondensedTags frs =
-  zip (fmap tagsToCondensedTags (frs^..traverse.finalResultTags))
-      (frs^..traverse.normalisedAbundance)

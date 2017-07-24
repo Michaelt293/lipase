@@ -8,7 +8,10 @@ import Spectra
 import qualified Isotope as I
 import Isotope hiding (monoisotopicMass)
 import Data.Monoid ((<>))
-import Data.List
+import Data.List (find)
+import Data.Csv (ToField(..))
+import Data.ByteString.Char8 (pack)
+
 
 newtype NumCarbons = NumCarbons { _getNumCarbons :: Int }
   deriving (Eq, Ord, Num)
@@ -35,8 +38,8 @@ instance Show NumDoubleBonds where
   show (NumDoubleBonds n) = show n
 
 data FattyAcyl = FattyAcyl {
-    _fattyAcylCarbons     :: NumCarbons
-  , _fattyAcylDoubleBonds :: NumDoubleBonds
+    _fattyAcylCarbons     :: !NumCarbons
+  , _fattyAcylDoubleBonds :: !NumDoubleBonds
 } deriving (Eq, Ord)
 
 makeClassy ''FattyAcyl
@@ -72,6 +75,35 @@ instance ToElementalComposition FattyAcid where
     toElementalComposition fa <> mkElementalComposition [(H, 1)]
   charge _ = Just 0
 
+instance ToField FattyAcid where
+  toField fa = pack $ show fa
+
+class IsSaturated a where
+  isSaturated :: a -> Bool
+
+instance IsSaturated FattyAcyl where
+  isSaturated (FattyAcyl _ dbs) = dbs == 0
+
+instance IsSaturated FattyAcid where
+  isSaturated (FattyAcid fa) = isSaturated fa
+
+class IsMonounsaturated a where
+  isMonounsaturated :: a -> Bool
+
+instance IsMonounsaturated FattyAcyl where
+  isMonounsaturated (FattyAcyl _ dbs) = dbs == 1
+
+instance IsMonounsaturated FattyAcid where
+  isMonounsaturated (FattyAcid fa) = isMonounsaturated fa
+
+class IsPolyunsaturated a where
+  isPolyunsaturated :: a -> Bool
+
+instance IsPolyunsaturated FattyAcyl where
+  isPolyunsaturated (FattyAcyl _ dbs) = dbs > 1
+
+instance IsPolyunsaturated FattyAcid where
+  isPolyunsaturated (FattyAcid fa) = isPolyunsaturated fa
 
 c10_0 :: FattyAcid
 c10_0 = FattyAcid (FattyAcyl 10 0)

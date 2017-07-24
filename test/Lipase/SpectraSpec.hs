@@ -3,10 +3,10 @@ module Lipase.SpectraSpec (spec) where
 import Spectra
 import FattyAcid
 import Triacylglycerol
-import Isotope.Ion
-import Data.Maybe
-import Data.List
 import Control.Lens
+import Isotope.Ion
+import Data.Maybe (fromMaybe, isNothing, isJust)
+import Data.List (sort)
 import Test.Hspec
 
 tg_161_181_201_spectrum :: [SpectrumCsv]
@@ -74,9 +74,9 @@ spec = do
         filteredSpectrum^.precursorIon `shouldBe`
         (885.5, 1100,
         [ Triacylglycerol (FattyAcyl 16 1)
-                           (FattyAcyl 18 1)
-                           (FattyAcyl 20 1)
-         , Triacylglycerol (FattyAcyl 18 1)
-                           (FattyAcyl 18 1)
-                           (FattyAcyl 18 1)
-         ])
+                          (FattyAcyl 18 1)
+                          (FattyAcyl 20 1)
+        , Triacylglycerol (FattyAcyl 18 1)
+                          (FattyAcyl 18 1)
+                          (FattyAcyl 18 1)
+        ])

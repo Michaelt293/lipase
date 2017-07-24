@@ -12,17 +12,16 @@ module Spectra where
 
 import Control.Lens
 
-import Isotope ( MonoisotopicMass
-               , MonoisotopicMass(..)
-               )
+import Isotope ( MonoisotopicMass, MonoisotopicMass(..))
 import Isotope.Ion (Mz(..))
 import Data.List (intercalate, find)
 import Data.Foldable (maximumBy)
 import Data.Ord (comparing)
 import Data.Monoid ((<>))
-import Data.Csv (FromNamedRecord(..), decodeByName, (.:))
+import Data.Csv (FromNamedRecord(..), decodeByName, (.:), ToField(..))
 import Data.Vector (toList)
-import qualified Data.ByteString.Lazy
+import qualified Data.ByteString.Lazy as ByteString
+
 
 makeClassy ''MonoisotopicMass
 
@@ -64,7 +63,7 @@ instance Show RelativeAbundance where
 
 newtype NormalisedAbundance =  NormalisedAbundance {
   _getNormalisedAbundance :: Double -- write show instance, 2 d.p, add "%"
-} deriving (Eq, Ord, Num, Fractional)
+} deriving (Eq, Ord, Num, Fractional, Real, RealFrac, RealFloat, Floating)
 
 makeClassy ''NormalisedAbundance
 
@@ -75,11 +74,14 @@ instance Monoid NormalisedAbundance where
 instance Show NormalisedAbundance where
   show (NormalisedAbundance v) = show v
 
+instance ToField NormalisedAbundance where
+  toField (NormalisedAbundance n) = toField n
+
 data SpectrumRow a = SpectrumRow {
     _ion                   :: a
-  , _srIntensity           :: Intensity
-  , _srRelativeAbundance   :: RelativeAbundance
-  , _srNormalisedAbundance :: NormalisedAbundance
+  , _srIntensity           :: !Intensity
+  , _srRelativeAbundance   :: !RelativeAbundance
+  , _srNormalisedAbundance :: !NormalisedAbundance
 } deriving (Eq, Ord, Functor, Foldable)
 
 makeClassy ''SpectrumRow
@@ -104,8 +106,8 @@ newtype MSSpectrum a = MSSpectrum
 makeLenses ''MSSpectrum
 
 data SpectrumCsv = SpectrumCsv {
-    _csvMz        :: Mz
-  , _csvIntensity :: Intensity
+    _csvMz        :: !Mz
+  , _csvIntensity :: !Intensity
 }
 
 makeLenses ''SpectrumCsv
@@ -119,7 +121,7 @@ instance FromNamedRecord SpectrumCsv where
 -- Adapted from https://github.com/Gabriel439/slides/blob/master/lambdaconf/data/exercises/02/Main.hs
 process :: FilePath -> IO [SpectrumCsv]
 process file = do
-    bytes <- Data.ByteString.Lazy.readFile file
+    bytes <- ByteString.readFile file
     case decodeByName bytes of
         Left   err        -> fail err
         Right (_, vector) -> return $ toList vector
@@ -149,7 +151,7 @@ instance Show a => Show (MSSpectrum a) where
 
 data MS2Spectrum a b = MS2Spectrum {
     _precursorIon :: a
-  , _ms2Spectrum :: [SpectrumRow b]
+  , _ms2Spectrum  :: [SpectrumRow b]
 } deriving (Show, Eq, Ord, Functor, Foldable)
 
 makeLenses ''MS2Spectrum

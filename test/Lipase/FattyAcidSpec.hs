@@ -38,3 +38,36 @@ spec = do
     it "328.2 should be DHA" $
       assignFA 0.3 (MonoisotopicMass 328.2) fattyAcids
       `shouldBe` Just (FattyAcid (FattyAcyl 22 6))
+
+  describe "isSaturated" $ do
+    it "Stearic acid is saturated" $
+      isSaturated (FattyAcid (FattyAcyl 18 0))
+      `shouldBe` True
+    it "Oleic acid is not saturated" $
+      isSaturated (FattyAcid (FattyAcyl 18 1))
+      `shouldBe` False
+    it "DHA is not saturated" $
+      isSaturated (FattyAcid (FattyAcyl 22 6))
+      `shouldBe` False
+
+  describe "isMonounsaturated" $ do
+    it "Stearic acid is monounsaturated" $
+      isMonounsaturated (FattyAcid (FattyAcyl 18 0))
+      `shouldBe` False
+    it "Oleic acid is not monounsaturated" $
+      isMonounsaturated (FattyAcid (FattyAcyl 18 1))
+      `shouldBe` True
+    it "DHA is not monounsaturated" $
+      isMonounsaturated (FattyAcid (FattyAcyl 22 6))
+      `shouldBe` False
+
+  describe "isPolyunsaturated" $ do
+    it "Stearic acid is polyunsaturated" $
+      isPolyunsaturated (FattyAcid (FattyAcyl 18 0))
+      `shouldBe` False
+    it "Oleic acid is not polyunsaturated" $
+      isPolyunsaturated (FattyAcid (FattyAcyl 18 1))
+      `shouldBe` False
+    it "DHA is not polyunsaturated" $
+      isPolyunsaturated (FattyAcid (FattyAcyl 22 6))
+      `shouldBe` True
